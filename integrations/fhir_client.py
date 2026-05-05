@@ -87,14 +87,21 @@ class FHIRClient:
         return self._extract_entries(bundle)
 
     async def get_medications(self, patient_id: str, days: int = 90) -> list[dict]:
-        cutoff = self._date_cutoff(days)
         bundle = await self._get("MedicationRequest", {
             "patient": patient_id,
-            "authoredon": f"gt{cutoff}",
             "_count": DEFAULT_PAGE_SIZE,
             "_sort": "-authoredon",
         })
-        return self._extract_entries(bundle)
+        entries = self._extract_entries(bundle)
+        # Filter client-side: HAPI public server doesn't reliably support authoredon date param
+        if days:
+            cutoff_dt = datetime.now(timezone.utc) - timedelta(days=days)
+            cutoff_str = cutoff_dt.strftime("%Y-%m-%d")
+            entries = [
+                e for e in entries
+                if e.get("authoredOn", "9999-12-31")[:10] >= cutoff_str
+            ]
+        return entries
 
     async def get_observations(
         self,

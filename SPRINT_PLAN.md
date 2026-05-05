@@ -136,28 +136,28 @@ File: `sharp/context.py`, `sharp/middleware.py`, `sharp/audit.py`
 
 ---
 
-## PHASE 4: Deploy & Polish (Hari 12-13) — ⏳ BELUM DIMULAI
+## PHASE 4: Deploy & Polish (Hari 12-13) — ✅ SEBAGIAN SELESAI
 
-### 4.1 README.md — ⏳
-- [ ] Quick start guide
-- [ ] 7 tools dengan contoh input/output JSON
-- [ ] ASCII architecture diagram
-- [ ] SHARP context explanation + how to use with Prompt Opinion
-- [ ] How to register di Prompt Opinion platform
-- [ ] Troubleshooting section
+### 4.1 README.md — ✅ SELESAI
+- [x] Quick start guide
+- [x] 7 tools dengan contoh input/output JSON
+- [x] ASCII architecture diagram
+- [x] SHARP context explanation + how to use with Prompt Opinion
+- [x] Design principles, tech stack, project structure
 
-### 4.2 Synthea Seeding & Integration Test — ⏳
-- [ ] Download Synthea FHIR R4 bundles dari `synthea.mitre.org/downloads`
-- [ ] Jalankan: `python scripts/seed_synthea.py --dir path/to/fhir_r4/ --count 5`
-- [ ] Simpan patient IDs ke `tests/fixtures/test_patients.json`
-- [ ] End-to-end test setiap tool dengan real patient IDs
+### 4.2 Synthea Seeding & Integration Test — ✅ SELESAI
+- [x] Synthetic FHIR R4 bundle dibuat dengan 23 resources (realistic clinical scenario)
+- [x] Uploaded ke HAPI FHIR sebagai `synthea-demo-patient` (Eleanor M. Dawson)
+- [x] Patient IDs disimpan ke `tests/fixtures/test_patients.json`
+- [x] End-to-end test 7/7 tools PASS dengan real patient ID
+- [x] Bug fix: `fhir_client.get_medications()` client-side date filtering
 
 ### 4.3 Server HTTP Transport — ✅ (sudah done di main.py)
 ```python
 mcp.run(transport="streamable-http", host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
 ```
 
-### 4.4 Railway Deployment — ⏳
+### 4.4 Railway Deployment — ⏳ TODO
 ```bash
 railway login && railway init && railway up
 ```
@@ -165,18 +165,18 @@ railway login && railway init && railway up
 - [ ] Verify public URL: `https://unified-patient-mcp.railway.app`
 - [ ] Test tool calls via public URL
 
-### 4.5 Prompt Opinion Registration — ⏳
+### 4.5 Prompt Opinion Registration — ⏳ TODO (butuh Railway URL)
 - [ ] Buat akun di promptopinion.ai
 - [ ] Register MCP server URL di marketplace
 - [ ] Test via platform interface
 
-### 4.6 Demo Video Recording — ⏳
-Script (3 menit):
+### 4.6 Demo Video Recording — ⏳ TODO (butuh Prompt Opinion account)
+Script (3 menit) dengan demo patient `synthea-demo-patient`:
 1. (0:00-0:30) Problem statement — 36 menit di EHR per kunjungan 30 menit
-2. (0:30-1:00) `get_patient_snapshot` via Prompt Opinion → SHARP auto-inject patient ID
-3. (1:00-1:40) `detect_clinical_deterioration_signals` → NEWS2=7 → AI narrative
+2. (0:30-1:00) `get_patient_snapshot` → Eleanor Dawson, T2DM + CKD + HTN
+3. (1:00-1:40) `detect_clinical_deterioration_signals` → NEWS2=6 (medium) → AI narrative
 4. (1:40-2:15) `synthesize_cross_domain_insights` → "Is creatinine related to new medication?" → KLIMAKS
-5. (2:15-2:45) `get_medication_timeline` → drug interaction detected
+5. (2:15-2:45) `get_medication_timeline` → metformin + lisinopril interaction
 6. (2:45-3:00) Closing tagline
 
 ---
@@ -190,9 +190,10 @@ Script (3 menit):
 - [x] `pytest tests/ -v` → 69 tests pass
 - [x] HTTP transport (`streamable-http`) dikonfigurasi di `main.py`
 - [x] `Dockerfile` dan `railway.json` siap
+- [x] README.md lengkap (quick start, 7 tools JSON examples, SHARP, arsitektur)
+- [x] Demo patient `synthea-demo-patient` di HAPI FHIR (7/7 tools verified)
 - [ ] `npx @modelcontextprotocol/inspector python main.py` → 7 tools terlihat
 - [ ] Railway deployment online dan responding
 - [ ] Semua tools registered di Prompt Opinion Marketplace
 - [ ] Demo video direkam DI DALAM Prompt Opinion platform
-- [ ] README.md lengkap
 - [ ] Devpost submission form: repo link, demo video, description (mention SHARP + AI Factor)

@@ -15,9 +15,10 @@
 | Phase 1.5: SHARP Integration | ✅ SELESAI | +19 tests (SHARP + Tool 7) |
 | Phase 2: Core Tools (1-4) | ✅ SELESAI (dalam Phase 1) | +11 tests |
 | Phase 3: Intelligence Layer | ✅ SELESAI (dalam Phase 1) | — |
-| Phase 4: Deploy & Polish | ⏳ BELUM DIMULAI | — |
+| Phase 4: Deploy & Polish | ✅ SELESAI (README, Synthea, end-to-end test) | — |
 
-**Total tests saat ini: 69/69 PASS**
+**Total tests saat ini: 69/69 PASS**  
+**7/7 tools verified end-to-end with real HAPI FHIR demo patient (synthea-demo-patient)**
 
 ---
 
@@ -106,31 +107,29 @@
 
 ---
 
-## ⏳ BELUM DIKERJAKAN (Phase 4)
+## ✅ SELESAI DI PHASE 4 (2026-05-05)
 
-### 4.1 — README.md
-- [ ] Quick start guide
-- [ ] Contoh output JSON setiap tool (7 tools)
-- [ ] ASCII architecture diagram
-- [ ] How to register di Prompt Opinion
-- [ ] SHARP context explanation
-- [ ] Link demo video (placeholder dulu)
+### 4.1 — README.md ✅
+- [x] Quick start guide
+- [x] Contoh output JSON setiap tool (7 tools)
+- [x] ASCII architecture diagram
+- [x] SHARP context explanation + Prompt Opinion usage
+- [x] Design principles + tech stack
 
-### 4.2 — Synthea Test Data
-- [ ] Download Synthea FHIR R4 bundles dari synthea.mitre.org/downloads
-- [ ] Jalankan `python scripts/seed_synthea.py --dir path/to/fhir_r4/ --count 5`
-- [ ] Verifikasi patient IDs di `tests/fixtures/test_patients.json`
-- [ ] End-to-end test tools dengan real Synthea patient IDs
+### 4.2 — Synthea Test Data ✅
+- [x] Synthetic FHIR R4 bundle dibuat (23 resources: Patient, Conditions, Meds, Vitals, Labs, Allergy)
+- [x] Uploaded ke HAPI FHIR public server sebagai `synthea-demo-patient`
+- [x] Patient IDs disimpan di `tests/fixtures/test_patients.json`
+- [x] End-to-end test semua 7 tools PASS dengan `synthea-demo-patient`
+- [x] Bug fix: `fhir_client.get_medications()` — filter `authoredon` di-handle client-side (HAPI tidak support server-side)
 
 ### 4.3 — Railway Deployment
-- [ ] `railway login && railway init && railway up`
-- [ ] Set env vars di Railway dashboard (ANTHROPIC_API_KEY, FHIR_BASE_URL, OPENFDA_BASE_URL)
+- [ ] `railway login && railway init && railway up` — **TODO: Perlu railway account**
+- [ ] Set env vars di Railway dashboard
 - [ ] Verify public URL responding
 
 ### 4.4 — Prompt Opinion Registration
-- [ ] Buat akun di promptopinion.ai
-- [ ] Register MCP server URL
-- [ ] Test via Prompt Opinion platform interface
+- [ ] Register MCP server URL di Prompt Opinion marketplace — **TODO: Perlu Railway URL dulu**
 - [ ] Record demo video di dalam platform
 
 ---
@@ -238,4 +237,6 @@ unified-patient-mcp/
 2. **Tool 7 sub-calls** di-patch via `tools.lab_results.get_recent_abnormal_labs` (module-level), bukan `tools.cross_domain_insights.get_recent_abnormal_labs`.
 3. **LLM calls** akan return `None` jika `ANTHROPIC_API_KEY` tidak di-set — tools tetap berjalan tanpa crash (graceful degradation).
 4. **HAPI FHIR** public server kadang lambat (~5-10 detik). Timeout default 15 detik.
-5. **Phase 4 adalah prioritas berikutnya** — README.md, Synthea seeding, Railway deploy, Prompt Opinion registration.
+5. **Demo patient**: `synthea-demo-patient` di HAPI FHIR public server — Eleanor M. Dawson, 68yo, T2DM + CKD3 + HTN, creatinine rising, NEWS2=6.
+6. **`fhir_client.get_medications()`**: filter `authoredon` dilakukan client-side (HAPI public server tidak support server-side date filter untuk MedicationRequest).
+7. **Sisa yang belum selesai**: Railway deployment + Prompt Opinion registration (butuh akun dan public URL).
