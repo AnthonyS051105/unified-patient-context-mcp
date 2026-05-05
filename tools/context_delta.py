@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from integrations.fhir_client import FHIRClient, FHIRError
 from integrations.llm_client import LLMClient
 from models.deterioration import ContextDelta
+from sharp import extract_sharp_context, resolve_patient_id, build_sharp_metadata, log_tool_call, log_sharp_absent
 
 logger = logging.getLogger(__name__)
 
@@ -64,22 +65,34 @@ def _summarize_condition(resource: dict) -> dict:
     }
 
 
-async def get_patient_context_delta(patient_id: str, since_hours: int = 48) -> dict:
+async def get_patient_context_delta(patient_id: str, since_hours: int = 48, ctx=None) -> dict:
     """
     Get what has changed in a patient's record over the last N hours.
 
     Uses FHIR _lastUpdated filter to efficiently fetch only changed resources.
-    AI generates a plain-language narrative summary of changes.
+    AI generates a plain-language narrative summary starting with 'In the last X hours, ...'.
 
     Args:
-        patient_id: FHIR Patient resource ID
+        patient_id: FHIR Patient resource ID (overridden by SHARP context if present)
         since_hours: Look-back window in hours (default 48)
+        ctx: MCP context — carries SHARP headers from Prompt Opinion platform
 
     Returns:
         ContextDelta with categorized changes and AI narrative
     """
+    sharp = extract_sharp_context(ctx)
+    effective_id = resolve_patient_id(patient_id, sharp)
+
+    if sharp.is_present:
+        log_tool_call("get_patient_context_delta", sharp.session_id, sharp.role)
+    else:
+        log_sharp_absent("get_patient_context_delta")
+
+    if not effective_id:
+        return {"error": "MISSING_PATIENT_ID", "message": "patient_id required", "retry_suggested": False}
+
     try:
-        changed = await fhir.get_all_since(patient_id, hours=since_hours)
+        changed = await fhir.get_all_since(effective_id, hours=since_hours)
     except FHIRError as e:
         return e.to_dict()
     except Exception as e:
@@ -101,11 +114,10 @@ async def get_patient_context_delta(patient_id: str, since_hours: int = 48) -> d
     }
 
     narrative = await llm.explain_context_delta("the patient", since_hours, changes)
-
     query_ts = datetime.now(timezone.utc).isoformat()
 
     delta = ContextDelta(
-        patient_id=patient_id,
+        patient_id=effective_id,
         since_hours=since_hours,
         new_labs=new_labs,
         changed_medications=changed_meds,
@@ -118,4 +130,6 @@ async def get_patient_context_delta(patient_id: str, since_hours: int = 48) -> d
         query_timestamp=query_ts,
     )
 
-    return delta.model_dump()
+    result = delta.model_dump()
+    result["sharp_metadata"] = build_sharp_metadata(sharp)
+    return result

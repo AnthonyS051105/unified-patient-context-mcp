@@ -6,6 +6,7 @@ from integrations.llm_client import LLMClient
 from engine.news2 import calculate_news2
 from engine.mews import calculate_mews
 from models.deterioration import DeteriorationReport, VitalSign
+from sharp import extract_sharp_context, resolve_patient_id, build_sharp_metadata, role_is, log_tool_call, log_sharp_absent
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +62,7 @@ def _parse_vital(resource: dict) -> Optional[tuple[str, float, VitalSign]]:
     unit = resource.get("valueQuantity", {}).get("unit")
 
     if value is None:
-        components = resource.get("component", [])
-        for comp in components:
+        for comp in resource.get("component", []):
             comp_code = comp.get("code", {}).get("coding", [{}])[0].get("code", "")
             if comp_code == "8480-6":
                 value = comp.get("valueQuantity", {}).get("value")
@@ -92,7 +92,7 @@ def _build_triggered_rules(vitals: dict, news2_score: int, mews_score: int) -> l
     spo2 = vitals.get("oxygen_saturation")
     sbp = vitals.get("systolic_bp")
     temp = vitals.get("body_temperature")
-    avpu = vitals.get("consciousness_avpu")
+    avpu = vitals.get("consciousness_str")
 
     if hr is not None:
         if hr <= 40 or hr >= 131:
@@ -135,26 +135,37 @@ def _build_triggered_rules(vitals: dict, news2_score: int, mews_score: int) -> l
 
 
 async def detect_clinical_deterioration_signals(
-    patient_id: str, hours_lookback: int = 72
+    patient_id: str,
+    hours_lookback: int = 72,
+    ctx=None,
 ) -> dict:
     """
     Detect clinical deterioration signals using NEWS2 and MEWS scoring algorithms.
 
-    Fetches vital signs from FHIR and applies rule-based scoring. AI generates
-    the clinical narrative — it does NOT diagnose or predict.
+    Rule engine decides risk level. AI generates the narrative explanation — no diagnosis.
+    Output always includes confidence='rule-based' and action_required_by='clinician'.
 
     Args:
-        patient_id: FHIR Patient resource ID
+        patient_id: FHIR Patient resource ID (overridden by SHARP context if present)
         hours_lookback: Hours of vital sign history to analyze (default 72)
+        ctx: MCP context — carries SHARP headers from Prompt Opinion platform
 
     Returns:
         DeteriorationReport with NEWS2/MEWS scores, triggered rules, and clinical narrative.
-        Always includes confidence='rule-based' and action_required_by='clinician'.
     """
+    sharp = extract_sharp_context(ctx)
+    effective_id = resolve_patient_id(patient_id, sharp)
+
+    if sharp.is_present:
+        log_tool_call("detect_clinical_deterioration_signals", sharp.session_id, sharp.role)
+    else:
+        log_sharp_absent("detect_clinical_deterioration_signals")
+
+    if not effective_id:
+        return {"error": "MISSING_PATIENT_ID", "message": "patient_id required", "retry_suggested": False}
+
     try:
-        obs_raw = await fhir.get_observations(
-            patient_id, category="vital-signs", hours=hours_lookback
-        )
+        obs_raw = await fhir.get_observations(effective_id, category="vital-signs", hours=hours_lookback)
     except FHIRError as e:
         return e.to_dict()
     except Exception as e:
@@ -176,12 +187,9 @@ async def detect_clinical_deterioration_signals(
                 latest_ts = vs.effective_date
 
     if "consciousness_avpu" not in latest_vitals and "gcs_total" in latest_vitals:
-        latest_vitals["consciousness_avpu"] = None
-        gcs = latest_vitals["gcs_total"]
-        avpu_from_gcs = _gcs_to_avpu(gcs)
-        latest_vitals["consciousness_str"] = avpu_from_gcs
+        latest_vitals["consciousness_str"] = _gcs_to_avpu(latest_vitals["gcs_total"])
     else:
-        latest_vitals["consciousness_str"] = latest_vitals.get("consciousness_avpu_str", "A")
+        latest_vitals["consciousness_str"] = latest_vitals.get("consciousness_str", "A")
 
     news2 = calculate_news2(
         rr=latest_vitals.get("respiratory_rate"),
@@ -212,12 +220,15 @@ async def detect_clinical_deterioration_signals(
         "high": "Immediate emergency response required",
     }
 
+    # Nurse-facing language: more actionable. Physician: more technical.
+    role_context = sharp.role or "clinician"
     clinical_narrative = await llm.explain_deterioration(
-        news2.total_score, mews.total_score, overall_risk, triggered_rules
+        news2.total_score, mews.total_score, overall_risk, triggered_rules,
+        role=role_context,
     )
 
     report = DeteriorationReport(
-        patient_id=patient_id,
+        patient_id=effective_id,
         news2=news2,
         mews=mews,
         triggered_rules=triggered_rules,
@@ -233,6 +244,6 @@ async def detect_clinical_deterioration_signals(
     )
 
     result = report.model_dump()
-    result["latest_vitals"] = {k: v for k, v in latest_vitals.items()
-                               if k not in ("consciousness_avpu", "consciousness_str")}
+    result["latest_vitals"] = {k: v for k, v in latest_vitals.items() if k != "consciousness_str"}
+    result["sharp_metadata"] = build_sharp_metadata(sharp)
     return result

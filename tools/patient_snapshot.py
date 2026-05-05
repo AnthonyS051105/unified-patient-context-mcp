@@ -1,10 +1,12 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
+from typing import Optional
 
 from integrations.fhir_client import FHIRClient, FHIRError
 from integrations.llm_client import LLMClient
 from models.patient import PatientSnapshot, ActiveProblem, Allergy
+from sharp import extract_sharp_context, resolve_patient_id, build_sharp_metadata, log_tool_call, log_sharp_absent
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +26,7 @@ def _parse_name(patient_resource: dict) -> str:
     return "Unknown"
 
 
-def _calc_age(birth_date: str) -> int | None:
+def _calc_age(birth_date: str) -> Optional[int]:
     try:
         bdate = datetime.strptime(birth_date[:10], "%Y-%m-%d")
         today = datetime.now(timezone.utc)
@@ -94,7 +96,7 @@ def _parse_allergy(resource: dict) -> Allergy:
     )
 
 
-async def get_patient_snapshot(patient_id: str) -> dict:
+async def get_patient_snapshot(patient_id: str, ctx=None) -> dict:
     """
     Retrieve a unified snapshot of a patient's current clinical status.
 
@@ -102,20 +104,36 @@ async def get_patient_snapshot(patient_id: str) -> dict:
     and AllergyIntolerance from FHIR, then generates an AI summary.
 
     Args:
-        patient_id: FHIR Patient resource ID
+        patient_id: FHIR Patient resource ID (overridden by SHARP context if present)
+        ctx: MCP context — carries SHARP headers from Prompt Opinion platform
 
     Returns:
-        PatientSnapshot as dict with ai_summary, data_sources, and last_updated
+        PatientSnapshot as dict with ai_summary, data_sources, sharp_metadata, and last_updated
     """
+    sharp = extract_sharp_context(ctx)
+    effective_id = resolve_patient_id(patient_id, sharp)
+
+    if sharp.is_present:
+        log_tool_call("get_patient_snapshot", sharp.session_id, sharp.role)
+    else:
+        log_sharp_absent("get_patient_snapshot")
+
+    if not effective_id:
+        return {
+            "error": "MISSING_PATIENT_ID",
+            "message": "patient_id is required when SHARP context is not present",
+            "retry_suggested": False,
+        }
+
     data_sources: list[str] = []
     errors: list[str] = []
 
     try:
         patient_resource, conditions_raw, meds_raw, allergies_raw = await asyncio.gather(
-            fhir.get_patient(patient_id),
-            fhir.get_conditions(patient_id, status="active"),
-            fhir.get_medications(patient_id, days=365),
-            fhir.get_allergies(patient_id),
+            fhir.get_patient(effective_id),
+            fhir.get_conditions(effective_id, status="active"),
+            fhir.get_medications(effective_id, days=365),
+            fhir.get_allergies(effective_id),
             return_exceptions=True,
         )
     except Exception as e:
@@ -171,7 +189,7 @@ async def get_patient_snapshot(patient_id: str) -> dict:
     ai_summary = await llm.patient_summary(name, condition_names, meds_count)
 
     snapshot = PatientSnapshot(
-        patient_id=patient_id,
+        patient_id=effective_id,
         name=name,
         birth_date=birth_date,
         age_years=age_years,
@@ -185,6 +203,7 @@ async def get_patient_snapshot(patient_id: str) -> dict:
     )
 
     result = snapshot.model_dump()
+    result["sharp_metadata"] = build_sharp_metadata(sharp)
     if errors:
         result["warnings"] = errors
     return result

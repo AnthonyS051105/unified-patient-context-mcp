@@ -6,14 +6,16 @@ from tools.medications import get_medication_timeline
 from tools.lab_results import get_recent_abnormal_labs
 from tools.deterioration import detect_clinical_deterioration_signals
 from tools.context_delta import get_patient_context_delta
+from tools.cross_domain_insights import synthesize_cross_domain_insights
 
 mcp = FastMCP(
     name="unified-patient-context",
     instructions=(
-        "Aggregates patient data from FHIR and clinical databases into unified context "
-        "for healthcare AI agents. Provides 6 clinical tools covering patient snapshots, "
-        "active problems, medication timelines, abnormal labs, deterioration signals, "
-        "and context deltas."
+        "Unified Patient Context MCP Server — aggregates FHIR patient data, lab results, "
+        "medications, and vital signs into a single clinical context for healthcare AI agents. "
+        "Supports SHARP context propagation from Prompt Opinion platform. "
+        "7 clinical tools: patient snapshot, active problems, medication timeline, "
+        "abnormal labs, deterioration signals, context delta, and cross-domain AI synthesis."
     ),
 )
 
@@ -23,3 +25,4 @@ mcp.tool()(get_medication_timeline)
 mcp.tool()(get_recent_abnormal_labs)
 mcp.tool()(detect_clinical_deterioration_signals)
 mcp.tool()(get_patient_context_delta)
+mcp.tool()(synthesize_cross_domain_insights)

@@ -4,6 +4,7 @@ from typing import Optional
 from integrations.fhir_client import FHIRClient, FHIRError
 from integrations.llm_client import LLMClient
 from models.lab import AbnormalLab, LabTrend
+from sharp import extract_sharp_context, resolve_patient_id, build_sharp_metadata, log_tool_call, log_sharp_absent
 
 logger = logging.getLogger(__name__)
 
@@ -112,12 +113,7 @@ def _compute_trend(observations: list[dict]) -> Optional[LabTrend]:
         direction = "stable"
     else:
         pct = ((last_val - first_val) / abs(first_val)) * 100
-        if pct > 10:
-            direction = "rising"
-        elif pct < -10:
-            direction = "falling"
-        else:
-            direction = "stable"
+        direction = "rising" if pct > 10 else ("falling" if pct < -10 else "stable")
     return LabTrend(
         direction=direction,
         data_points=len(values),
@@ -146,27 +142,40 @@ async def get_recent_abnormal_labs(
     patient_id: str,
     days: int = 30,
     threshold: str = "abnormal",
+    ctx=None,
 ) -> dict:
     """
     Retrieve recent abnormal lab results with trend analysis and AI explanations.
 
     Args:
-        patient_id: FHIR Patient resource ID
+        patient_id: FHIR Patient resource ID (overridden by SHARP context if present)
         days: Number of days to look back (default 30)
         threshold: Severity filter — 'critical', 'abnormal', or 'borderline'
+        ctx: MCP context — carries SHARP headers from Prompt Opinion platform
 
     Returns:
         Dict with list of AbnormalLab results, each with clinical_significance
     """
+    sharp = extract_sharp_context(ctx)
+    effective_id = resolve_patient_id(patient_id, sharp)
+
+    if sharp.is_present:
+        log_tool_call("get_recent_abnormal_labs", sharp.session_id, sharp.role)
+    else:
+        log_sharp_absent("get_recent_abnormal_labs")
+
+    if not effective_id:
+        return {"error": "MISSING_PATIENT_ID", "message": "patient_id required", "retry_suggested": False}
+
     if threshold not in THRESHOLD_MAP:
         return {
             "error": "INVALID_PARAMETER",
-            "message": f"threshold must be one of: critical, abnormal, borderline",
+            "message": "threshold must be one of: critical, abnormal, borderline",
             "retry_suggested": False,
         }
 
     try:
-        obs_raw = await fhir.get_observations(patient_id, category="laboratory", days=days)
+        obs_raw = await fhir.get_observations(effective_id, category="laboratory", days=days)
     except FHIRError as e:
         return e.to_dict()
     except Exception as e:
@@ -188,7 +197,6 @@ async def get_recent_abnormal_labs(
         level = _classify_abnormality(latest)
         if level is None:
             continue
-
         if threshold == "critical" and level != "critical":
             continue
         if threshold == "abnormal" and level == "borderline":
@@ -197,7 +205,11 @@ async def get_recent_abnormal_labs(
         trend = _compute_trend(obs_list)
         ref_range = _ref_range_text(latest)
         unit = latest.get("unit", "")
-        val_str = str(latest["value"]) + f" {unit}".rstrip() if latest.get("value") is not None else (latest.get("value_string") or "N/A")
+        val_str = (
+            str(latest["value"]) + (f" {unit}".rstrip() if unit else "")
+            if latest.get("value") is not None
+            else (latest.get("value_string") or "N/A")
+        )
         trend_str = trend.direction if trend else "unknown"
 
         explanation = await llm.explain_abnormal_lab(
@@ -224,11 +236,12 @@ async def get_recent_abnormal_labs(
     abnormals.sort(key=lambda x: {"critical": 0, "abnormal": 1, "borderline": 2}.get(x.abnormality_level, 3))
 
     return {
-        "patient_id": patient_id,
+        "patient_id": effective_id,
         "days_queried": days,
         "threshold": threshold,
         "abnormal_labs": [a.model_dump() for a in abnormals],
         "total_count": len(abnormals),
         "has_critical": any(a.abnormality_level == "critical" for a in abnormals),
         "data_sources": ["FHIR/Observation"],
+        "sharp_metadata": build_sharp_metadata(sharp),
     }

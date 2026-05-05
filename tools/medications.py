@@ -7,6 +7,7 @@ from integrations.openfda_client import OpenFDAClient
 from integrations.llm_client import LLMClient
 from engine.deduplicator import deduplicate_medications
 from models.medication import MedicationEntry, MedicationTimeline
+from sharp import extract_sharp_context, resolve_patient_id, build_sharp_metadata, role_is, log_tool_call, log_sharp_absent
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +27,7 @@ def _parse_medication(resource: dict) -> dict:
     code = codings[0].get("code") if codings else None
 
     dosage_list = resource.get("dosageInstruction", [])
-    dosage_text = None
-    route_text = None
-    frequency_text = None
+    dosage_text = route_text = frequency_text = None
     if dosage_list:
         d = dosage_list[0]
         dosage_text = d.get("text")
@@ -38,10 +37,7 @@ def _parse_medication(resource: dict) -> dict:
         timing = d.get("timing", {})
         repeat = timing.get("repeat", {})
         if repeat.get("frequency") and repeat.get("period"):
-            frequency_text = f"{repeat['frequency']} per {repeat['period']} {repeat.get('periodUnit', '')}"
-
-    status = resource.get("status", "unknown")
-    authored_on = resource.get("authoredOn")
+            frequency_text = f"{repeat['frequency']} per {repeat['period']} {repeat.get('periodUnit', '')}".strip()
 
     requester = resource.get("requester", {})
     prescriber = requester.get("display")
@@ -54,29 +50,44 @@ def _parse_medication(resource: dict) -> dict:
         "dosage": dosage_text,
         "route": route_text,
         "frequency": frequency_text,
-        "status": status,
-        "authored_on": authored_on,
+        "status": resource.get("status", "unknown"),
+        "authored_on": resource.get("authoredOn"),
         "prescriber": prescriber,
         "rxnorm_code": code,
     }
 
 
-async def get_medication_timeline(patient_id: str, days: int = 90) -> dict:
+async def get_medication_timeline(patient_id: str, days: int = 90, ctx=None) -> dict:
     """
     Get medication history with drug interaction flags.
 
     Fetches MedicationRequests from FHIR, deduplicates brand/generic names,
     and checks each drug pair against OpenFDA for interactions.
+    When SHARP role is 'pharmacist', interaction explanations are more detailed.
 
     Args:
-        patient_id: FHIR Patient resource ID
+        patient_id: FHIR Patient resource ID (overridden by SHARP context if present)
         days: Number of days to look back (default 90)
+        ctx: MCP context — carries SHARP headers from Prompt Opinion platform
 
     Returns:
         MedicationTimeline with interaction_flags and AI explanations
     """
+    sharp = extract_sharp_context(ctx)
+    effective_id = resolve_patient_id(patient_id, sharp)
+
+    if sharp.is_present:
+        log_tool_call("get_medication_timeline", sharp.session_id, sharp.role)
+    else:
+        log_sharp_absent("get_medication_timeline")
+
+    if not effective_id:
+        return {"error": "MISSING_PATIENT_ID", "message": "patient_id required", "retry_suggested": False}
+
+    is_pharmacist = role_is(sharp, "pharmacist")
+
     try:
-        meds_raw = await fhir.get_medications(patient_id, days=days)
+        meds_raw = await fhir.get_medications(effective_id, days=days)
     except FHIRError as e:
         return e.to_dict()
     except Exception as e:
@@ -103,13 +114,12 @@ async def get_medication_timeline(patient_id: str, days: int = 90) -> dict:
             total_interactions += 1
             if result.severity == "major":
                 has_major = True
-
             explanation = await llm.explain_interaction(
-                drug_a, drug_b, result.description
+                drug_a, drug_b, result.description,
+                detailed=is_pharmacist,
             )
             result.ai_explanation = explanation
             result.ai_generated = explanation is not None
-
             interaction_by_drug[drug_a].append(result)
             interaction_by_drug[drug_b].append(result)
 
@@ -134,7 +144,7 @@ async def get_medication_timeline(patient_id: str, days: int = 90) -> dict:
         medication_entries.append(entry)
 
     timeline = MedicationTimeline(
-        patient_id=patient_id,
+        patient_id=effective_id,
         days_queried=days,
         medications=medication_entries,
         total_interactions_found=total_interactions,
@@ -142,4 +152,6 @@ async def get_medication_timeline(patient_id: str, days: int = 90) -> dict:
         deduplication_applied=True,
         data_sources=["FHIR/MedicationRequest", "OpenFDA"],
     )
-    return timeline.model_dump()
+    result = timeline.model_dump()
+    result["sharp_metadata"] = build_sharp_metadata(sharp)
+    return result

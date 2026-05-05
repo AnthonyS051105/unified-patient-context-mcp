@@ -2,187 +2,197 @@
 # Unified Patient Context MCP Server
 
 ## Instruksi untuk Claude Code
+
 Ikuti sprint ini secara berurutan. Jangan skip fase. Setiap fase harus selesai dan
 berfungsi sebelum lanjut ke fase berikutnya. Jalankan tests di akhir setiap fase.
 
----
-
-## PHASE 1: Foundation (Hari 1-3)
-
-### 1.1 Project Setup
-```bash
-mkdir unified-patient-mcp && cd unified-patient-mcp
-python -m venv venv && source venv/bin/activate
-pip install mcp httpx pydantic python-dotenv pytest pytest-asyncio ruff
-```
-
-Buat file-file berikut (kosong dulu, isi nanti):
-- `requirements.txt` (dengan semua dependencies + versi)
-- `pyproject.toml` (konfigurasi pytest dan ruff)
-- `.env.example`
-- `.gitignore`
-- `Dockerfile`
-- `railway.json`
-
-### 1.2 Pydantic Models (models/)
-Urutan pembuatan:
-1. `models/patient.py` — PatientSnapshot, ActiveProblem, Allergy
-2. `models/medication.py` — MedicationEntry, InteractionFlag, MedicationTimeline
-3. `models/lab.py` — LabResult, AbnormalLab, LabTrend
-4. `models/deterioration.py` — VitalSign, ClinicalScore, DeteriorationReport, ContextDelta
-
-### 1.3 FHIR Client (integrations/fhir_client.py)
-Implementasikan methods:
-- `async get_patient(patient_id)` → dict
-- `async get_conditions(patient_id, status="active")` → list
-- `async get_medications(patient_id, days=90)` → list
-- `async get_observations(patient_id, category, days=30)` → list
-- `async get_allergies(patient_id)` → list
-- `async get_all_since(patient_id, hours)` → dict (semua resource dengan lastUpdated filter)
-
-Test dengan: `https://hapi.fhir.org/baseR4/Patient?_count=5` (pastikan bisa diakses)
-
-### 1.4 OpenFDA Client (integrations/openfda_client.py)
-Implementasikan methods:
-- `async check_interaction(drug_a: str, drug_b: str)` → InteractionFlag | None
-- `async get_drug_info(drug_name: str)` → dict
-
-### 1.5 Synthea Seeding (scripts/seed_synthea.py)
-- Download Synthea sample FHIR R4 bundles
-- Upload beberapa patients ke HAPI FHIR public server
-- Simpan patient IDs ke `tests/fixtures/test_patients.json`
+> **Lihat PROGRESS.md untuk status lengkap dan cara resume di session baru.**
 
 ---
 
-## PHASE 2: Core Tools (Hari 4-8)
+## PHASE 1: Foundation (Hari 1-3) — ✅ SELESAI
 
-### 2.1 Tool: get_patient_snapshot
-File: `tools/patient_snapshot.py`
-- Fetch Patient + Condition + MedicationRequest + AllergyIntolerance parallel (asyncio.gather)
-- Build PatientSnapshot Pydantic model
-- Call LLM untuk ai_summary
-- Register ke server.py
+### 1.1 Project Setup — ✅
+- [x] `requirements.txt` (mcp, httpx, pydantic, anthropic, pytest, ruff)
+- [x] `pyproject.toml` (pytest asyncio=auto, ruff config)
+- [x] `.env.example` (termasuk `MOCK_SHARP`, `MOCK_PATIENT_ID`, `MOCK_SHARP_ROLE`)
+- [x] `.gitignore`
+- [x] `Dockerfile`
+- [x] `railway.json`
 
-Test: Panggil dengan patient ID dari Synthea, pastikan semua fields populated
+### 1.2 SHARP Integration — ✅ SELESAI
 
-### 2.2 Tool: get_active_problems
-File: `tools/active_problems.py`
-- Fetch Condition dengan clinical-status=active
-- Sort by onset_date (terbaru dulu)
-- Optional: include resolved
-- AI: prioritize by urgency (1-3 sentence reasoning per condition)
+File: `sharp/context.py`, `sharp/middleware.py`, `sharp/audit.py`
 
-### 2.3 Tool: get_medication_timeline
-File: `tools/medications.py`
-- Fetch MedicationRequest dalam date range
-- Deduplicate brand/generic via deduplicator.py
-- Check interactions via OpenFDA untuk setiap pair obat
-- AI: explain each interaction dalam 1-2 kalimat
+- [x] `SHARPContext` dataclass
+- [x] `extract_sharp_context(ctx)` dengan graceful fallback (ctx=None, exception → empty SHARPContext)
+- [x] `MOCK_SHARP=true` mode berfungsi dengan `MOCK_PATIENT_ID` dan `MOCK_SHARP_ROLE`
+- [x] `resolve_patient_id()` — SHARP patient_id override explicit param
+- [x] `build_sharp_metadata()` — never includes ehr_token or patient_id
+- [x] `role_is()` — case-insensitive role check
+- [x] Zero-PII audit logging (session_id selalu `[REDACTED]` di logs)
+- [x] 19 test cases pass
 
-### 2.4 Tool: get_recent_abnormal_labs
-File: `tools/lab_results.py`
-- Fetch Observation category=laboratory
-- Filter berdasarkan interpretationCode (H/HH/L/LL) atau bandingkan dengan referenceRange
-- Calculate trend jika ≥2 datapoints tersedia
-- AI: clinical significance explanation per abnormal result
+### 1.3 Pydantic Models (`models/`) — ✅
+- [x] `models/patient.py` — PatientSnapshot, ActiveProblem, Allergy
+- [x] `models/medication.py` — MedicationEntry, InteractionFlag, MedicationTimeline
+- [x] `models/lab.py` — LabResult, AbnormalLab, LabTrend
+- [x] `models/deterioration.py` — VitalSign, ClinicalScore, DeteriorationReport, ContextDelta
 
----
+### 1.4 FHIR Client (`integrations/fhir_client.py`) — ✅
+- [x] `get_patient()`, `get_conditions()`, `get_medications()`, `get_observations()`
+- [x] `get_allergies()`, `get_all_since()` (lastUpdated filter)
+- [x] `FHIRError` dengan retry_suggested + to_dict()
+- [x] Connectivity verified: `hapi.fhir.org/baseR4` live dan accessible
 
-## PHASE 3: Intelligence Layer (Hari 9-11)
+### 1.5 OpenFDA Client (`integrations/openfda_client.py`) — ✅
+- [x] `check_interaction(drug_a, drug_b)` → InteractionFlag | None
+- [x] `get_drug_info(drug_name)` — tries generic then brand name
+- [x] Severity estimation (major/moderate/minor) dari keyword matching
 
-### 3.1 NEWS2 Engine (engine/news2.py)
-- Implementasikan scoring table sesuai ARCHITECTURE.md
-- Input: dict of vital signs values
-- Output: `{"score": int, "risk_level": str, "parameter_scores": dict}`
-- WAJIB: unit test dengan known clinical scenarios
+### 1.6 LLM Client (`integrations/llm_client.py`) — ✅
+- [x] `explain()` — base method, graceful None if no API key
+- [x] `synthesize()` — Tool 7, max_tokens=600
+- [x] `patient_summary()`, `prioritize_problems()` (role-aware)
+- [x] `explain_interaction()` (detailed=True for pharmacist)
+- [x] `explain_abnormal_lab()`, `explain_deterioration()` (role-aware nurse/physician)
+- [x] `explain_context_delta()`
 
-Test scenarios (dari literatur):
-```python
-# Scenario 1: Low risk patient
-vitals = {"rr": 16, "spo2": 97, "sbp": 120, "hr": 75, "temp": 37.0, "consciousness": "A"}
-assert news2_score(vitals) == {"score": 0, "risk_level": "low"}
+### 1.7 Clinical Engine — ✅
+- [x] `engine/news2.py` — NEWS2 per RCP 2017, verified with known scenarios
+- [x] `engine/mews.py` — MEWS 5-parameter
+- [x] `engine/deduplicator.py` — 50+ brand→generic mappings
 
-# Scenario 2: High risk patient
-vitals = {"rr": 26, "spo2": 90, "sbp": 88, "hr": 115, "temp": 38.5, "consciousness": "V"}
-assert news2_score(vitals)["risk_level"] == "high"
-```
-
-### 3.2 MEWS Engine (engine/mews.py)
-Scoring: RR, HR, Systolic BP, Consciousness, Temperature
-Mirip NEWS2 tapi 5 parameter.
-
-### 3.3 Deduplicator (engine/deduplicator.py)
-- Mapping common brand → generic names (hardcoded dict + fuzzy match)
-- `def deduplicate_medications(med_list: list) -> list`
-
-### 3.4 Tool: detect_clinical_deterioration_signals
-File: `tools/deterioration.py`
-- Fetch vital signs dari FHIR (hours_lookback)
-- Run NEWS2 + MEWS
-- Map scores ke triggered_rules
-- AI: generate clinical_narrative berdasarkan rules (BUKAN berdasarkan prediksi bebas)
-- WAJIB: output selalu ada `confidence: "rule-based"` dan `action_required_by: "clinician"`
-
-### 3.5 Tool: get_patient_context_delta
-File: `tools/context_delta.py`
-- Query semua resources dengan `_lastUpdated=gt{since_hours ago}`
-- Categorize changes: new_labs, changed_medications, new_vitals, new_conditions
-- AI: generate narrative "Dalam X jam terakhir, ..."
+### 1.8 Synthea Seeding Script — ✅
+- [x] `scripts/seed_synthea.py` — upload bundles, save patient IDs ke JSON
+- [ ] **TODO PHASE 4**: Jalankan script dengan actual Synthea bundles
 
 ---
 
-## PHASE 4: Deploy & Polish (Hari 12-13)
+## PHASE 2: Core Tools (Hari 4-8) — ✅ SELESAI (dikerjakan dalam Phase 1)
 
-### 4.1 Server HTTP Transport
-Update `main.py` untuk support Streamable HTTP:
+### 2.1 Tool 1: `get_patient_snapshot` — ✅
+- [x] asyncio.gather: Patient + Condition + MedicationRequest + AllergyIntolerance
+- [x] SHARP: resolve_patient_id, build_sharp_metadata dalam response
+- [x] AI: 1-sentence patient summary
+- [x] Graceful degradation jika partial FHIR data unavailable
+
+### 2.2 Tool 2: `get_active_problems` — ✅
+- [x] SHARP: role-aware urgency prioritization (nurse/physician/pharmacist angle)
+- [x] AI: urgency scoring 1-5 dengan reasoning per condition
+- [x] Sort by urgency score descending
+
+### 2.3 Tool 3: `get_medication_timeline` — ✅
+- [x] Dedup brand/generic via deduplicator.py
+- [x] OpenFDA interaction check per drug pair (max 20 pairs)
+- [x] SHARP: pharmacist role → detailed interaction explanation
+- [x] sharp_metadata di response
+
+### 2.4 Tool 4: `get_recent_abnormal_labs` — ✅
+- [x] threshold: critical/abnormal/borderline
+- [x] Trend calculation (rising/falling/stable) jika ≥2 data points
+- [x] AI: clinical significance explanation per lab
+- [x] SHARP: resolve_patient_id + sharp_metadata
+
+---
+
+## PHASE 3: Intelligence Layer (Hari 9-11) — ✅ SELESAI
+
+### 3.1 NEWS2 Engine — ✅
+- [x] Semua parameter: RR, SpO2, SBP, HR, Consciousness, Temperature, Supplemental O2
+- [x] Risk levels: low/low-medium/medium/high
+- [x] Test scenario low risk: score=0 ✓
+- [x] Test scenario high risk: score=15, risk=high ✓
+
+### 3.2 MEWS Engine — ✅
+- [x] 5 parameter: RR, HR, SBP, Consciousness (AVPU), Temperature
+- [x] AVPU scoring A=0, V=1, P=2, U=3
+
+### 3.3 Deduplicator — ✅
+- [x] 50+ brand→generic mappings
+- [x] `deduplicate_medications()` — merge dan set is_duplicate_merged=True
+
+### 3.4 Tool 5: `detect_clinical_deterioration_signals` — ✅
+- [x] LOINC code mapping untuk 10 vital sign types
+- [x] BP component extraction (systolic dari composite resource)
+- [x] GCS→AVPU conversion
+- [x] Triggered rules generation
+- [x] SHARP: role-aware narrative (nurse=actionable, physician=technical)
+- [x] `confidence="rule-based"`, `action_required_by="clinician"` SELALU ada
+
+### 3.5 Tool 6: `get_patient_context_delta` — ✅
+- [x] 4 kategori: labs, meds, vitals, conditions
+- [x] AI narrative "In the last X hours, ..."
+- [x] `no_changes=true` jika tidak ada perubahan
+
+### 3.6 Tool 7: `synthesize_cross_domain_insights` ⭐ — ✅
+- [x] Parallel sub-calls: labs + meds + deterioration via asyncio.gather
+- [x] Role-aware LLM prompt (physician/nurse/pharmacist)
+- [x] JSON-structured output: synthesis_narrative, confidence_level, data_gaps, cross_domain_patterns
+- [x] Sub-call failure handling (graceful, error masuk ke data_gaps)
+- [x] Disclaimer + action_required_by="clinician" ALWAYS
+- [x] SHARP metadata di response
+- [x] 11 test cases pass (termasuk 3 clinical question scenarios)
+
+---
+
+## PHASE 4: Deploy & Polish (Hari 12-13) — ⏳ BELUM DIMULAI
+
+### 4.1 README.md — ⏳
+- [ ] Quick start guide
+- [ ] 7 tools dengan contoh input/output JSON
+- [ ] ASCII architecture diagram
+- [ ] SHARP context explanation + how to use with Prompt Opinion
+- [ ] How to register di Prompt Opinion platform
+- [ ] Troubleshooting section
+
+### 4.2 Synthea Seeding & Integration Test — ⏳
+- [ ] Download Synthea FHIR R4 bundles dari `synthea.mitre.org/downloads`
+- [ ] Jalankan: `python scripts/seed_synthea.py --dir path/to/fhir_r4/ --count 5`
+- [ ] Simpan patient IDs ke `tests/fixtures/test_patients.json`
+- [ ] End-to-end test setiap tool dengan real patient IDs
+
+### 4.3 Server HTTP Transport — ✅ (sudah done di main.py)
 ```python
 mcp.run(transport="streamable-http", host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
 ```
 
-### 4.2 Test Suite Lengkap
-`tests/test_tools.py`:
-- Test setiap tool dengan Synthea patient IDs
-- Test graceful degradation (mock FHIR server down)
-- Test LLM fallback (mock Anthropic API error)
-
-### 4.3 Dockerfile
-```dockerfile
-FROM python:3.11-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-COPY . .
-EXPOSE 8000
-CMD ["python", "main.py"]
-```
-
-### 4.4 README.md
-Wajib ada:
-- Quick start guide
-- Semua 6 tools dengan contoh input dan output (JSON)
-- Architecture diagram (ASCII)
-- How to register di Prompt Opinion platform
-- Link ke demo video
-
-### 4.5 Deploy ke Railway
+### 4.4 Railway Deployment — ⏳
 ```bash
 railway login && railway init && railway up
 ```
-Set environment variables di Railway dashboard.
+- [ ] Set ANTHROPIC_API_KEY, FHIR_BASE_URL, OPENFDA_BASE_URL di Railway dashboard
+- [ ] Verify public URL: `https://unified-patient-mcp.railway.app`
+- [ ] Test tool calls via public URL
 
-### 4.6 Register di Prompt Opinion
-- Buat akun di promptopinion.ai
-- Register MCP server URL
-- Test via platform interface
+### 4.5 Prompt Opinion Registration — ⏳
+- [ ] Buat akun di promptopinion.ai
+- [ ] Register MCP server URL di marketplace
+- [ ] Test via platform interface
+
+### 4.6 Demo Video Recording — ⏳
+Script (3 menit):
+1. (0:00-0:30) Problem statement — 36 menit di EHR per kunjungan 30 menit
+2. (0:30-1:00) `get_patient_snapshot` via Prompt Opinion → SHARP auto-inject patient ID
+3. (1:00-1:40) `detect_clinical_deterioration_signals` → NEWS2=7 → AI narrative
+4. (1:40-2:15) `synthesize_cross_domain_insights` → "Is creatinine related to new medication?" → KLIMAKS
+5. (2:15-2:45) `get_medication_timeline` → drug interaction detected
+6. (2:45-3:00) Closing tagline
 
 ---
 
 ## Checklist Final Sebelum Submit
 
-- [ ] `npx @modelcontextprotocol/inspector python main.py` → semua 6 tools terlihat dan bisa di-invoke
-- [ ] `pytest tests/ -v` → minimal 10 tests pass
+- [x] Semua 7 tools terdaftar dan `server.py` bisa diimport tanpa error
+- [x] SHARP context diekstrak tanpa error (test dengan `MOCK_SHARP=true`)
+- [x] SHARP metadata muncul di response semua tools
+- [x] `synthesize_cross_domain_insights` menghasilkan narrative koheren
+- [x] `pytest tests/ -v` → 69 tests pass
+- [x] HTTP transport (`streamable-http`) dikonfigurasi di `main.py`
+- [x] `Dockerfile` dan `railway.json` siap
+- [ ] `npx @modelcontextprotocol/inspector python main.py` → 7 tools terlihat
 - [ ] Railway deployment online dan responding
 - [ ] Semua tools registered di Prompt Opinion Marketplace
-- [ ] README.md dengan contoh output setiap tool
-- [ ] Demo video 3 menit sesuai script di CLAUDE.md
-- [ ] Devpost submission form lengkap dengan: repo link, demo video, description
+- [ ] Demo video direkam DI DALAM Prompt Opinion platform
+- [ ] README.md lengkap
+- [ ] Devpost submission form: repo link, demo video, description (mention SHARP + AI Factor)

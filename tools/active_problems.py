@@ -4,6 +4,7 @@ import logging
 from integrations.fhir_client import FHIRClient, FHIRError
 from integrations.llm_client import LLMClient
 from models.patient import ActiveProblem
+from sharp import extract_sharp_context, resolve_patient_id, build_sharp_metadata, role_is, log_tool_call, log_sharp_absent
 
 logger = logging.getLogger(__name__)
 
@@ -51,22 +52,35 @@ def _parse_condition(resource: dict) -> ActiveProblem:
     )
 
 
-async def get_active_problems(patient_id: str, include_resolved: bool = False) -> dict:
+async def get_active_problems(patient_id: str, include_resolved: bool = False, ctx=None) -> dict:
     """
     Get a prioritized list of a patient's clinical problems.
 
-    Fetches Condition resources from FHIR and uses AI to assign urgency scores.
+    Fetches Condition resources from FHIR. AI urgency prioritization adapts to
+    clinician role from SHARP context (physician → diagnosis focus, nurse → monitoring focus).
 
     Args:
-        patient_id: FHIR Patient resource ID
+        patient_id: FHIR Patient resource ID (overridden by SHARP context if present)
         include_resolved: If True, include resolved/inactive conditions
+        ctx: MCP context — carries SHARP headers from Prompt Opinion platform
 
     Returns:
-        Dict with 'problems' list and AI urgency prioritization
+        Dict with prioritized 'problems' list and AI urgency scores
     """
+    sharp = extract_sharp_context(ctx)
+    effective_id = resolve_patient_id(patient_id, sharp)
+
+    if sharp.is_present:
+        log_tool_call("get_active_problems", sharp.session_id, sharp.role)
+    else:
+        log_sharp_absent("get_active_problems")
+
+    if not effective_id:
+        return {"error": "MISSING_PATIENT_ID", "message": "patient_id required", "retry_suggested": False}
+
     try:
         status = None if include_resolved else "active"
-        conditions_raw = await fhir.get_conditions(patient_id, status=status)
+        conditions_raw = await fhir.get_conditions(effective_id, status=status)
     except FHIRError as e:
         return e.to_dict()
     except Exception as e:
@@ -80,7 +94,16 @@ async def get_active_problems(patient_id: str, include_resolved: bool = False) -
             pass
 
     condition_names = [p.display for p in problems]
-    urgency_json = await llm.prioritize_problems(condition_names)
+
+    role_hint = ""
+    if role_is(sharp, "nurse"):
+        role_hint = " Focus on conditions requiring active monitoring and intervention."
+    elif role_is(sharp, "pharmacist"):
+        role_hint = " Focus on conditions relevant to medication management and drug interactions."
+    else:
+        role_hint = " Focus on diagnostic urgency and clinical severity."
+
+    urgency_json = await llm.prioritize_problems(condition_names, role_hint=role_hint)
 
     urgency_map: dict[str, dict] = {}
     if urgency_json:
@@ -102,11 +125,12 @@ async def get_active_problems(patient_id: str, include_resolved: bool = False) -
     problems.sort(key=lambda p: -(p.urgency_score or 0))
 
     return {
-        "patient_id": patient_id,
+        "patient_id": effective_id,
         "problems": [p.model_dump() for p in problems],
         "total_count": len(problems),
         "include_resolved": include_resolved,
         "ai_prioritized": bool(urgency_json),
         "ai_generated": bool(urgency_json),
         "data_sources": ["FHIR/Condition"],
+        "sharp_metadata": build_sharp_metadata(sharp),
     }

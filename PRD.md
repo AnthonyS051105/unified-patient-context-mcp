@@ -1,5 +1,7 @@
 # PRD — Product Requirements Document
+
 # Unified Patient Context MCP Server
+
 # Hackathon: Agents Assemble — The Healthcare AI Endgame
 
 ---
@@ -7,19 +9,22 @@
 ## 1. Executive Summary
 
 **Nama Produk:** Unified Patient Context MCP Server  
-**Tagline:** *"One call. Full context. Every agent."*  
+**Tagline:** _"One call. Full context. Every agent."_  
 **Tipe Submission:** Option 1 — Build a Superpower (MCP Server)  
-**Target Pengguna:** AI agents yang beroperasi di dalam platform Prompt Opinion untuk membantu klinisi  
+**Target Pengguna:** AI agents yang beroperasi di dalam platform Prompt Opinion untuk membantu klinisi
 
 ### Problem Statement
+
 Di ekosistem healthcare AI saat ini, setiap agent harus "wawancara" 5-10 sistem berbeda (EHR, lab system,
 pharmacy system, wearable gateway) hanya untuk memahami kondisi satu pasien. Ini menciptakan:
+
 - **Latency tinggi** — agent lambat karena harus query banyak sistem
 - **Konteks tidak lengkap** — agent bertindak berdasarkan informasi parsial
 - **Duplikasi data** — obat yang sama dari dua sumber dianggap dua entry berbeda
 - **Risiko klinis** — deteriorasi pasien tidak terdeteksi karena data tersebar
 
 ### Solution Statement
+
 MCP server ini menjadi **intelligence layer** di antara agents dan sumber data klinis. Agent tidak perlu
 tahu FHIR, HL7, atau OpenFDA exists. Mereka cukup memanggil tools berbahasa klinis dan mendapat
 konteks pasien yang sudah diproses, dideduplikasi, dan dijelaskan dalam bahasa natural.
@@ -29,15 +34,19 @@ konteks pasien yang sudah diproses, dideduplikasi, dan dijelaskan dalam bahasa n
 ## 2. Goals & Success Metrics
 
 ### Hackathon Goals
-| Goal | Metric | Target |
-|---|---|---|
-| Semua tools berfungsi | Tools bisa di-invoke via MCP Inspector | 6/6 tools |
-| Clinical accuracy | NEWS2 score sesuai algoritma resmi | 100% |
-| Drug interaction detection | OpenFDA integration berjalan | ≥1 interaksi terdeteksi di demo |
-| Response time | Latency per tool call | < 3 detik |
-| Demo quality | Video 3 menit menunjukkan semua tools | Complete |
+
+| Goal                       | Metric                                                                  | Target                          |
+| -------------------------- | ----------------------------------------------------------------------- | ------------------------------- |
+| Semua tools berfungsi      | Tools bisa di-invoke via MCP Inspector                                  | 7/7 tools                       |
+| SHARP integration          | SHARP context diekstrak & dipropagasi                                   | Semua tools                     |
+| Clinical accuracy          | NEWS2 score sesuai algoritma resmi                                      | 100%                            |
+| AI Factor genuine          | `synthesize_cross_domain_insights` menghasilkan reasoning lintas domain | Demo-ready                      |
+| Drug interaction detection | OpenFDA integration berjalan                                            | ≥1 interaksi terdeteksi di demo |
+| Response time              | Latency per tool call                                                   | < 3 detik                       |
+| Demo quality               | Video 3 menit di Prompt Opinion platform                                | Complete                        |
 
 ### Impact Goals (Post-Hackathon Vision)
+
 - Mengurangi waktu yang dihabiskan klinisi untuk mengumpulkan konteks pasien dari rata-rata 8 menit → < 30 detik
 - Menjadi foundational MCP tool yang digunakan oleh 10+ specialized agents di Prompt Opinion Marketplace
 
@@ -46,6 +55,7 @@ konteks pasien yang sudah diproses, dideduplikasi, dan dijelaskan dalam bahasa n
 ## 3. User Stories
 
 ### Primary User: Healthcare AI Agent
+
 ```
 SEBAGAI sebuah diagnosis agent di Prompt Opinion platform,
 SAYA INGIN memanggil satu tool untuk mendapat konteks lengkap pasien,
@@ -64,7 +74,24 @@ SAYA INGIN melihat seluruh timeline obat pasien beserta flag interaksi,
 AGAR SAYA bisa mendeteksi potensi medication error sebelum dispensing.
 ```
 
+```
+SEBAGAI sebuah clinical reasoning agent,
+SAYA INGIN mengajukan pertanyaan klinis seperti "apakah kreatinin tinggi ini
+berhubungan dengan obat baru?" dan mendapat jawaban yang mensintesis data dari
+lab, obat, dan vital signs secara bersamaan,
+AGAR SAYA bisa mendukung keputusan klinisi dengan reasoning yang koheren —
+bukan hanya daftar data mentah.
+```
+
+```
+SEBAGAI klinisi yang bekerja di Prompt Opinion platform,
+SAYA INGIN bahwa agent yang saya gunakan secara otomatis mengetahui pasien mana
+yang sedang saya tangani tanpa saya harus memasukkan ID pasien secara manual,
+AGAR workflow saya tidak terganggu — ini adalah fungsi SHARP context propagation.
+```
+
 ### Secondary User: Klinisi (via agent intermediary)
+
 ```
 SEBAGAI seorang dokter jaga,
 SAYA INGIN agent saya bisa memberi briefing pasien dalam hitungan detik,
@@ -75,7 +102,18 @@ AGAR SAYA bisa fokus pada keputusan klinis, bukan pengumpulan data.
 
 ## 4. Functional Requirements
 
+### FR-00: SHARP Context Integration (SYARAT WAJIB KOMPETISI)
+
+- **HARUS** mengimplementasikan `sharp/context.py` dengan `SHARPContext` dataclass
+- **HARUS** mengekstrak SHARP context dari setiap MCP tool call
+- **HARUS** memprioritaskan `sharp.patient_id` di atas parameter `patient_id` eksplisit
+- **HARUS** menyertakan `sharp_metadata` di setiap response model
+- **HARUS** gracefully fallback ke parameter eksplisit jika SHARP context tidak ada
+- **HARUS** support `MOCK_SHARP=true` environment variable untuk testing lokal
+- **TIDAK BOLEH** crash jika SHARP context tidak tersedia (local testing scenario)
+
 ### FR-01: get_patient_snapshot
+
 - **HARUS** mengambil data dari FHIR resources: Patient, Condition, MedicationRequest, AllergyIntolerance
 - **HARUS** menghasilkan AI-generated 1-sentence summary kondisi pasien
 - **HARUS** mencantumkan `data_sources` (list FHIR resources yang diquery)
@@ -83,12 +121,14 @@ AGAR SAYA bisa fokus pada keputusan klinis, bukan pengumpulan data.
 - **BOLEH** mengembalikan partial data jika sebagian resource tidak tersedia (graceful degradation)
 
 ### FR-02: get_active_problems
+
 - **HARUS** hanya mengembalikan Condition dengan status "active" secara default
 - **HARUS** include `onset_date` jika tersedia di FHIR
 - **HARUS** include `severity` jika tersedia
 - **BOLEH** include resolved conditions jika `include_resolved=True`
 
 ### FR-03: get_medication_timeline
+
 - **HARUS** query MedicationRequest dari FHIR dalam window `days` terakhir
 - **HARUS** query OpenFDA untuk setiap pasangan obat (drug interaction check)
 - **HARUS** melakukan deduplication brand vs generic name
@@ -96,12 +136,14 @@ AGAR SAYA bisa fokus pada keputusan klinis, bukan pengumpulan data.
 - **HARUS** AI-generated explanation untuk setiap interaction flag
 
 ### FR-04: get_recent_abnormal_labs
+
 - **HARUS** query FHIR Observation dengan category=laboratory
 - **HARUS** filter berdasarkan `threshold`: critical/abnormal/borderline
 - **HARUS** menghitung trend (naik/turun/stabil) jika ada ≥2 data points
 - **HARUS** AI-generated clinical significance explanation per abnormal lab
 
 ### FR-05: detect_clinical_deterioration_signals
+
 - **HARUS** mengimplementasikan NEWS2 scoring algorithm secara akurat
 - **HARUS** mengimplementasikan MEWS scoring algorithm secara akurat
 - **HARUS** query vital signs dari FHIR Observation dalam window `hours_lookback`
@@ -109,7 +151,20 @@ AGAR SAYA bisa fokus pada keputusan klinis, bukan pengumpulan data.
 - **HARUS** AI-generated explanation dalam bahasa yang bisa dipahami klinisi non-spesialis
 - **TIDAK BOLEH** output mengandung kata "diagnose", "diagnosis", atau "prescribe"
 
-### FR-06: get_patient_context_delta
+### FR-07: synthesize_cross_domain_insights ⭐ (AI FACTOR UTAMA)
+
+- **HARUS** menerima `clinical_question` dalam bahasa natural (bahasa Inggris)
+- **HARUS** memanggil tools lain secara internal (get_recent_abnormal_labs,
+  get_medication_timeline, detect_clinical_deterioration_signals) sebagai sub-calls
+- **HARUS** menghasilkan narrative yang mensintesis temuan lintas domain secara bersamaan
+- **HARUS** menyertakan `confidence_level` dan `data_gaps` (informasi apa yang kurang)
+- **HARUS** selalu menyertakan `action_required_by: "clinician"` dan disclaimer AI
+- **HARUS** response berbeda berdasarkan `sharp.role`:
+  - `physician`: full clinical reasoning dengan terminologi medis
+  - `nurse`: actionable summary, fokus pada tanda yang perlu dimonitor
+  - `pharmacist`: medication-focused synthesis
+- **TIDAK BOLEH** membuat diagnosis atau merekomendasikan perubahan pengobatan spesifik
+- **TIDAK BOLEH** menggunakan kata "diagnose", "diagnosis", atau "prescribe" dalam output
 - **HARUS** menggunakan FHIR `_lastUpdated` filter untuk efisiensi
 - **HARUS** mengembalikan perubahan dalam 4 kategori: labs, medications, vitals, conditions
 - **HARUS** AI-generated narrative summary: "Dalam X jam terakhir, ..."
@@ -120,20 +175,24 @@ AGAR SAYA bisa fokus pada keputusan klinis, bukan pengumpulan data.
 ## 5. Non-Functional Requirements
 
 ### NFR-01: Performance
+
 - Response time per tool call: < 3 detik (P95)
 - Concurrent requests: server harus handle minimal 10 simultaneous tool calls
 
 ### NFR-02: Reliability
+
 - Jika FHIR server timeout: return error dengan `retry_suggested: true`
 - Jika OpenFDA tidak tersedia: return medication list tanpa interaction flags, dengan warning
 - Jika LLM API gagal: return structured data tanpa AI explanation, dengan flag `ai_explanation: null`
 
 ### NFR-03: Security & Privacy
+
 - Zero persistent storage pasien data
 - API keys disimpan di environment variables, tidak pernah di-hardcode
 - Patient ID tidak boleh muncul di application logs
 
 ### NFR-04: Maintainability
+
 - Setiap tool harus punya docstring yang menjelaskan input, output, dan data sources
 - Semua integration clients harus mockable untuk testing
 - Coverage minimal 70% untuk engine/ dan integrations/
@@ -153,22 +212,22 @@ AGAR SAYA bisa fokus pada keputusan klinis, bukan pengumpulan data.
 
 ## 7. Timeline
 
-| Fase | Durasi | Deliverable |
-|---|---|---|
-| Phase 1: Foundation | 3 hari | Project setup, FHIR client, Pydantic models, Synthea seeding |
-| Phase 2: Core Tools | 5 hari | Tools 1-4 berfungsi dan tested |
-| Phase 3: Intelligence | 3 hari | Tool 5 (NEWS2/MEWS) + Tool 6 (delta) + LLM integration |
-| Phase 4: Deploy & Demo | 2 hari | Railway deploy, README, demo video recording |
-| **Total** | **~13 hari** | **Submission-ready** |
+| Fase                   | Durasi       | Deliverable                                                  |
+| ---------------------- | ------------ | ------------------------------------------------------------ |
+| Phase 1: Foundation    | 3 hari       | Project setup, FHIR client, Pydantic models, Synthea seeding |
+| Phase 2: Core Tools    | 5 hari       | Tools 1-4 berfungsi dan tested                               |
+| Phase 3: Intelligence  | 3 hari       | Tool 5 (NEWS2/MEWS) + Tool 6 (delta) + LLM integration       |
+| Phase 4: Deploy & Demo | 2 hari       | Railway deploy, README, demo video recording                 |
+| **Total**              | **~13 hari** | **Submission-ready**                                         |
 
 ---
 
 ## 8. Risks & Mitigations
 
-| Risk | Likelihood | Impact | Mitigation |
-|---|---|---|---|
-| HAPI FHIR public server down | Medium | High | Cache last-known state, dokumentasikan alternatif (SMART Health IT sandbox) |
-| OpenFDA rate limiting | Low | Medium | Implement exponential backoff, cache drug interaction results |
-| NEWS2 algorithm error | Low | High | Test dengan known clinical scenarios dari literatur medis |
-| LLM explanation hallucination | Medium | High | Prompt engineering ketat, selalu berdasarkan structured data, bukan opini bebas |
-| Prompt Opinion platform integration issues | Medium | High | Test via MCP Inspector dulu, dokumentasikan troubleshooting |
+| Risk                                       | Likelihood | Impact | Mitigation                                                                      |
+| ------------------------------------------ | ---------- | ------ | ------------------------------------------------------------------------------- |
+| HAPI FHIR public server down               | Medium     | High   | Cache last-known state, dokumentasikan alternatif (SMART Health IT sandbox)     |
+| OpenFDA rate limiting                      | Low        | Medium | Implement exponential backoff, cache drug interaction results                   |
+| NEWS2 algorithm error                      | Low        | High   | Test dengan known clinical scenarios dari literatur medis                       |
+| LLM explanation hallucination              | Medium     | High   | Prompt engineering ketat, selalu berdasarkan structured data, bukan opini bebas |
+| Prompt Opinion platform integration issues | Medium     | High   | Test via MCP Inspector dulu, dokumentasikan troubleshooting                     |
