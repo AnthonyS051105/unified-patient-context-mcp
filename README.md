@@ -110,7 +110,7 @@ MOCK_SHARP=true MOCK_PATIENT_ID=test-patient-123 MOCK_SHARP_ROLE=physician pytho
 
 | Variable | Default | Description |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | *(required)* | API key for Claude Haiku LLM calls |
+| `GEMINI_API_KEY` | *(required)* | API key for Gemini 2.0 Flash LLM calls |
 | `FHIR_BASE_URL` | `https://hapi.fhir.org/baseR4` | FHIR R4 server base URL |
 | `OPENFDA_BASE_URL` | `https://api.fda.gov/drug` | OpenFDA API base URL |
 | `MCP_HOST` | `0.0.0.0` | Server bind host |
@@ -613,7 +613,7 @@ unified-patient-mcp/
 - **Pydantic v2** — data validation and serialization
 - **HAPI FHIR** public test server (R4) — `hapi.fhir.org/baseR4`
 - **OpenFDA API** — drug interaction data
-- **Claude Haiku** (`claude-haiku-4-5-20251001`) — clinical explanation and synthesis
+- **Gemini 2.0 Flash** (`gemini-2.0-flash`) — clinical explanation and synthesis
 - **Railway.app** — deployment
 - **pytest + pytest-asyncio** — 69 automated tests
 

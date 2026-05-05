@@ -6,41 +6,45 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
-MODEL = "claude-haiku-4-5-20251001"
+# Gemini API — gemini-2.5-flash is fast, capable, and the recommended free-tier model
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 DEFAULT_TIMEOUT = 15.0
 
 
 class LLMClient:
     def __init__(self, api_key: Optional[str] = None):
-        self._api_key = api_key or os.getenv("ANTHROPIC_API_KEY", "")
+        self._api_key = api_key or os.getenv("GEMINI_API_KEY", "")
 
     async def explain(self, prompt: str, max_tokens: int = 200) -> Optional[str]:
         if not self._api_key:
-            logger.warning("ANTHROPIC_API_KEY not set — skipping LLM explanation")
+            logger.warning("GEMINI_API_KEY not set — skipping LLM explanation")
             return None
         try:
             async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
                 response = await client.post(
-                    ANTHROPIC_API_URL,
-                    headers={
-                        "x-api-key": self._api_key,
-                        "anthropic-version": "2023-06-01",
-                        "content-type": "application/json",
-                    },
+                    GEMINI_API_URL,
+                    params={"key": self._api_key},
+                    headers={"content-type": "application/json"},
                     json={
-                        "model": MODEL,
-                        "max_tokens": max_tokens,
-                        "messages": [{"role": "user", "content": prompt}],
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {
+                            "maxOutputTokens": max_tokens,
+                            "temperature": 0.2,
+                        },
                     },
                 )
                 response.raise_for_status()
-                return response.json()["content"][0]["text"]
+                data = response.json()
+                return data["candidates"][0]["content"]["parts"][0]["text"]
         except httpx.TimeoutException:
             logger.warning("LLM request timed out")
             return None
         except httpx.HTTPStatusError as e:
             logger.warning("LLM returned HTTP %s", e.response.status_code)
+            return None
+        except (KeyError, IndexError) as e:
+            logger.warning("LLM response parse error: %s", e)
             return None
         except Exception as e:
             logger.warning("LLM error: %s", e)
