@@ -1,3 +1,4 @@
+import os
 from mcp.server.fastmcp import FastMCP
 
 from tools.patient_snapshot import get_patient_snapshot
@@ -17,6 +18,8 @@ mcp = FastMCP(
         "7 clinical tools: patient snapshot, active problems, medication timeline, "
         "abnormal labs, deterioration signals, context delta, and cross-domain AI synthesis."
     ),
+    host=os.getenv("FASTMCP_HOST", "0.0.0.0"),
+    port=int(os.getenv("PORT", os.getenv("FASTMCP_PORT", "8000"))),
 )
 
 mcp.tool()(get_patient_snapshot)
