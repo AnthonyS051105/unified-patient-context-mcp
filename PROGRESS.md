@@ -130,8 +130,13 @@
 - [x] MCP endpoint: https://amiable-determination-production.up.railway.app/mcp
 - [x] Status: Online (verified responding)
 
-### 4.4 — Prompt Opinion Registration
-- [ ] Register MCP server URL di Prompt Opinion marketplace — **TODO: Perlu Railway URL dulu**
+### 4.4 — Prompt Opinion Registration & Testing ✅
+- [x] Register MCP server "Unified Patient Context Server" di Marketplace Studio
+- [x] 7 tools terdeteksi oleh platform
+- [x] Buat BYO Agent "Clinical Context Assistant" (Patient scope, system prompt klinis)
+- [x] Import synthetic patient ke Prompt Opinion
+- [x] End-to-end test via Launchpad → chat → FHIR fetch berhasil (Eleanor M. Dawson)
+- [ ] **TODO**: Isi Publisher Profile → Enable Publishing → Publish MCP server ke marketplace (wajib untuk submission)
 - [ ] Record demo video di dalam platform
 
 ---

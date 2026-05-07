@@ -157,18 +157,23 @@ File: `sharp/context.py`, `sharp/middleware.py`, `sharp/audit.py`
 mcp.run(transport="streamable-http", host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
 ```
 
-### 4.4 Railway Deployment — ⏳ TODO
-```bash
-railway login && railway init && railway up
-```
-- [ ] Set ANTHROPIC_API_KEY, FHIR_BASE_URL, OPENFDA_BASE_URL di Railway dashboard
-- [ ] Verify public URL: `https://unified-patient-mcp.railway.app`
-- [ ] Test tool calls via public URL
+### 4.4 Railway Deployment — ✅ SELESAI
+- [x] `railway login && railway init && railway up` — deployed
+- [x] Set GEMINI_API_KEY, GEMINI_MODEL, FHIR_BASE_URL, OPENFDA_BASE_URL, FASTMCP_HOST di Railway
+- [x] Public URL: https://amiable-determination-production.up.railway.app
+- [x] MCP endpoint: https://amiable-determination-production.up.railway.app/mcp
+- [x] Status: Online (verified responding, HTTP 406 = normal)
 
-### 4.5 Prompt Opinion Registration — ⏳ TODO (butuh Railway URL)
-- [ ] Buat akun di promptopinion.ai
-- [ ] Register MCP server URL di marketplace
-- [ ] Test via platform interface
+### 4.5 Prompt Opinion Registration & Testing — ✅ SELESAI
+- [x] Buat akun di promptopinion.ai (org: NexusHealth)
+- [x] Register MCP server "Unified Patient Context Server" di Marketplace Studio
+- [x] 7 tools terdeteksi oleh platform
+- [x] Buat BYO Agent "Clinical Context Assistant" dengan system prompt klinis
+- [x] Import synthetic patient (Edward499 Balistreri607) ke Prompt Opinion
+- [x] Test via Launchpad → Patient scope → chat berhasil
+- [x] `get_patient_snapshot` berhasil fetch Eleanor M. Dawson dari HAPI FHIR
+- [x] Agent merespons dalam Bahasa Indonesia dengan data klinis akurat
+- [ ] **TODO**: Publish MCP server ke Marketplace (butuh isi Publisher Profile dulu)
 
 ### 4.6 Demo Video Recording — ⏳ TODO (butuh Prompt Opinion account)
 Script (3 menit) dengan demo patient `synthea-demo-patient`:
