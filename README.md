@@ -540,9 +540,14 @@ railway up
 # ANTHROPIC_API_KEY, FHIR_BASE_URL, OPENFDA_BASE_URL
 ```
 
-Your server will be accessible at `https://unified-patient-mcp.railway.app`.
+Your server will be accessible at `https://amiable-determination-production.up.railway.app`.
 
-To register with Prompt Opinion: add the Railway URL as an MCP server endpoint in the Prompt Opinion marketplace settings.
+**MCP Endpoint URL** (use this when registering with Prompt Opinion):
+```
+https://amiable-determination-production.up.railway.app/mcp
+```
+
+To register with Prompt Opinion: add the URL above as an MCP server endpoint in the Prompt Opinion marketplace settings.
 
 ---
 

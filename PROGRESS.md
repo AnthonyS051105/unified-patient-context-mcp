@@ -123,10 +123,12 @@
 - [x] End-to-end test semua 7 tools PASS dengan `synthea-demo-patient`
 - [x] Bug fix: `fhir_client.get_medications()` — filter `authoredon` di-handle client-side (HAPI tidak support server-side)
 
-### 4.3 — Railway Deployment
-- [ ] `railway login && railway init && railway up` — **TODO: Perlu railway account**
-- [ ] Set env vars di Railway dashboard
-- [ ] Verify public URL responding
+### 4.3 — Railway Deployment ✅
+- [x] `railway login && railway init && railway up` — deployed
+- [x] Set env vars: GEMINI_API_KEY, GEMINI_MODEL, FHIR_BASE_URL, OPENFDA_BASE_URL, FASTMCP_HOST
+- [x] Public URL: https://amiable-determination-production.up.railway.app
+- [x] MCP endpoint: https://amiable-determination-production.up.railway.app/mcp
+- [x] Status: Online (verified responding)
 
 ### 4.4 — Prompt Opinion Registration
 - [ ] Register MCP server URL di Prompt Opinion marketplace — **TODO: Perlu Railway URL dulu**
