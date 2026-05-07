@@ -12,3 +12,4 @@ build/
 .DS_Store
 tests/fixtures/test_patients.json
 *.zip
+.env.example
