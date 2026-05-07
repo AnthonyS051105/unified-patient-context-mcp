@@ -13,7 +13,9 @@ logging.basicConfig(
 from server import mcp  # noqa: E402 — must import after env loaded
 
 if __name__ == "__main__":
-    host = os.getenv("MCP_HOST", "0.0.0.0")
-    port = int(os.getenv("MCP_PORT", os.getenv("PORT", "8000")))
+    # FastMCP reads settings via FASTMCP_ prefix env vars
+    # Railway injects PORT; mirror it to FASTMCP_PORT and bind to 0.0.0.0
+    os.environ.setdefault("FASTMCP_HOST", "0.0.0.0")
+    os.environ.setdefault("FASTMCP_PORT", os.getenv("PORT", "8000"))
 
-    mcp.run(transport="streamable-http", host=host, port=port)
+    mcp.run(transport="streamable-http")
