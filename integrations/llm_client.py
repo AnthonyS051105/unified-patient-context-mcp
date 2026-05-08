@@ -6,56 +6,53 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-# OpenRouter — OpenAI-compatible API, supports many free models
-# Docs: https://openrouter.ai/docs
-OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "google/gemini-2.5-flash-preview:free")
+# Google Gemini via AI Studio — 1500 req/day free tier
+# Get API key: https://aistudio.google.com/apikey
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 
 DEFAULT_TIMEOUT = 20.0
 
 
 class LLMClient:
     def __init__(self, api_key: Optional[str] = None):
-        self._api_key = api_key or os.getenv("OPENROUTER_API_KEY", "")
+        self._api_key = api_key or os.getenv("GEMINI_API_KEY", "")
 
     async def explain(self, prompt: str, max_tokens: int = 200) -> Optional[str]:
         if not self._api_key:
-            logger.warning("OPENROUTER_API_KEY not set — skipping LLM explanation")
+            logger.warning("GEMINI_API_KEY not set — skipping LLM explanation")
             return None
         try:
             async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
                 response = await client.post(
-                    OPENROUTER_API_URL,
-                    headers={
-                        "Authorization": f"Bearer {self._api_key}",
-                        "Content-Type": "application/json",
-                        "HTTP-Referer": "https://amiable-determination-production.up.railway.app",
-                        "X-Title": "Nara by NexusHealth",
-                    },
+                    GEMINI_API_URL,
+                    params={"key": self._api_key},
+                    headers={"Content-Type": "application/json"},
                     json={
-                        "model": OPENROUTER_MODEL,
-                        "max_tokens": max(max_tokens, 100),
-                        "temperature": 0.2,
-                        "messages": [{"role": "user", "content": prompt}],
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {
+                            "maxOutputTokens": max(max_tokens, 100),
+                            "temperature": 0.2,
+                        },
                     },
                 )
                 response.raise_for_status()
                 data = response.json()
-                return data["choices"][0]["message"]["content"]
+                return data["candidates"][0]["content"]["parts"][0]["text"]
         except httpx.TimeoutException:
-            logger.warning("OpenRouter request timed out")
+            logger.warning("Gemini request timed out")
             return None
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 429:
-                logger.warning("OpenRouter rate limit hit — skipping LLM explanation")
+                logger.warning("Gemini rate limit hit — skipping LLM explanation")
             else:
-                logger.warning("OpenRouter returned HTTP %s", e.response.status_code)
+                logger.warning("Gemini returned HTTP %s", e.response.status_code)
             return None
         except (KeyError, IndexError) as e:
-            logger.warning("OpenRouter response parse error: %s", e)
+            logger.warning("Gemini response parse error: %s", e)
             return None
         except Exception as e:
-            logger.warning("OpenRouter error: %s", e)
+            logger.warning("Gemini error: %s", e)
             return None
 
     async def synthesize(self, prompt: str) -> Optional[str]:
