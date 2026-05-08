@@ -163,5 +163,48 @@ class FHIRClient:
             "conditions": conditions,
         }
 
+    async def get_patients_by_location(self, ward_id: str, max_count: int = 20) -> list[dict]:
+        """
+        Get patients in a ward/location.
+        Falls back to demo ward mapping if FHIR location query returns nothing.
+        """
+        import os
+
+        # Demo ward mapping (used when HAPI doesn't have location data)
+        demo_wards: dict[str, list[str]] = {}
+        ward_env = os.getenv("DEMO_WARD_PATIENTS", "")
+        if ward_env:
+            for entry in ward_env.split(";"):
+                parts = entry.split(":", 1)
+                if len(parts) == 2:
+                    wid, pids = parts
+                    demo_wards[wid.strip()] = [p.strip() for p in pids.split(",") if p.strip()]
+
+        if ward_id in demo_wards:
+            patient_ids = demo_wards[ward_id][:max_count]
+            patients = []
+            for pid in patient_ids:
+                try:
+                    p = await self.get_patient(pid)
+                    patients.append(p)
+                except FHIRError:
+                    pass
+            return patients
+
+        # Try FHIR location-based query
+        try:
+            bundle = await self._get("Patient", {
+                "_has:Encounter:patient:location": ward_id,
+                "_count": max_count,
+            })
+            entries = self._extract_entries(bundle)
+            if entries:
+                return entries[:max_count]
+        except FHIRError:
+            pass
+
+        # Final fallback: return empty (demo will use mock patients)
+        return []
+
     async def close(self):
         await self._client.aclose()

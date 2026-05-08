@@ -8,15 +8,20 @@ from tools.lab_results import get_recent_abnormal_labs
 from tools.deterioration import detect_clinical_deterioration_signals
 from tools.context_delta import get_patient_context_delta
 from tools.cross_domain_insights import synthesize_cross_domain_insights
+from tools.ward_alerts import scan_ward_alerts
+from tools.orchestrate import orchestrate_context_from_sources
 
 mcp = FastMCP(
     name="unified-patient-context",
     instructions=(
-        "Unified Patient Context MCP Server — aggregates FHIR patient data, lab results, "
-        "medications, and vital signs into a single clinical context for healthcare AI agents. "
+        "Nara by NexusHealth — Unified Patient Context MCP Server. "
+        "Proactive, Adaptive, Transparent, Interoperable healthcare AI layer. "
+        "9 clinical tools: patient snapshot, active problems, medication timeline, "
+        "abnormal labs, deterioration signals, context delta, cross-domain AI synthesis, "
+        "proactive ward alerts (scan_ward_alerts), and meta-orchestrator (orchestrate_context_from_sources). "
         "Supports SHARP context propagation from Prompt Opinion platform. "
-        "7 clinical tools: patient snapshot, active problems, medication timeline, "
-        "abnormal labs, deterioration signals, context delta, and cross-domain AI synthesis."
+        "Adaptive Clinical Persona (physician/nurse/pharmacist/patient) on every tool. "
+        "Confidence-Weighted Evidence Trail on synthesis tools."
     ),
     host=os.getenv("FASTMCP_HOST", "0.0.0.0"),
     port=int(os.getenv("PORT", os.getenv("FASTMCP_PORT", "8000"))),
@@ -29,3 +34,5 @@ mcp.tool()(get_recent_abnormal_labs)
 mcp.tool()(detect_clinical_deterioration_signals)
 mcp.tool()(get_patient_context_delta)
 mcp.tool()(synthesize_cross_domain_insights)
+mcp.tool()(scan_ward_alerts)
+mcp.tool()(orchestrate_context_from_sources)

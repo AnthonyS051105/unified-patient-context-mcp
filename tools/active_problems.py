@@ -5,11 +5,13 @@ from integrations.fhir_client import FHIRClient, FHIRError
 from integrations.llm_client import LLMClient
 from models.patient import ActiveProblem
 from sharp import extract_sharp_context, resolve_patient_id, build_sharp_metadata, role_is, log_tool_call, log_sharp_absent
+from persona.adapter import PersonaAdapter
 
 logger = logging.getLogger(__name__)
 
 fhir = FHIRClient()
 llm = LLMClient()
+persona = PersonaAdapter(llm)
 
 
 def _parse_condition(resource: dict) -> ActiveProblem:
@@ -124,7 +126,7 @@ async def get_active_problems(patient_id: str, include_resolved: bool = False, c
 
     problems.sort(key=lambda p: -(p.urgency_score or 0))
 
-    return {
+    result = {
         "patient_id": effective_id,
         "problems": [p.model_dump() for p in problems],
         "total_count": len(problems),
@@ -134,3 +136,8 @@ async def get_active_problems(patient_id: str, include_resolved: bool = False, c
         "data_sources": ["FHIR/Condition"],
         "sharp_metadata": build_sharp_metadata(sharp),
     }
+    if sharp.role:
+        result = await persona.adapt(result, sharp.role)
+    else:
+        result["persona_applied"] = "physician"
+    return result

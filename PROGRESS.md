@@ -16,9 +16,11 @@
 | Phase 2: Core Tools (1-4) | ✅ SELESAI (dalam Phase 1) | +11 tests |
 | Phase 3: Intelligence Layer | ✅ SELESAI (dalam Phase 1) | — |
 | Phase 4: Deploy & Polish | ✅ SELESAI (README, Synthea, end-to-end test) | — |
+| **Phase 5: Advanced Features** | ✅ **SELESAI** | **+56 tests** |
 
-**Total tests saat ini: 69/69 PASS**  
-**7/7 tools verified end-to-end with real HAPI FHIR demo patient (synthea-demo-patient)**
+**Total tests saat ini: 125/125 PASS**  
+**9/9 tools registered dan verified**  
+**4/4 Advanced Features implemented: Evidence Trail, Adaptive Persona, Ward Alerts, Meta-Orchestrator**
 
 ---
 
@@ -238,12 +240,56 @@ unified-patient-mcp/
 
 ---
 
+---
+
+## ✅ SELESAI DI PHASE 5 (2026-05-07) — Advanced Features
+
+### Phase 5.1 — Evidence Trail Engine ✅
+- [x] `models/advanced.py` — EvidenceItem, EvidenceTrail, PatientAlert, WardAlertReport, OrchestratedContext
+- [x] `evidence/__init__.py`, `evidence/scorer.py`, `evidence/trail.py`, `evidence/models.py`
+- [x] EvidenceScorer: recency/completeness/quality weights, confidence labels, transparency notes
+- [x] Integrated into Tool 5 (deterioration) + Tool 7 (cross_domain_insights)
+- [x] `tests/test_evidence.py` — 14 tests pass
+
+### Phase 5.2 — Adaptive Clinical Persona ✅
+- [x] `persona/__init__.py`, `persona/profiles.py`, `persona/adapter.py`, `persona/prompts.py`
+- [x] 4 roles: physician (narrative), nurse (bullets), pharmacist (structured), patient (plain)
+- [x] PersonaAdapter.adapt() + adapt_sync_fallback() 
+- [x] Integrated into ALL 7 existing tools (Tools 1-7)
+- [x] `tests/test_persona.py` — 22 tests pass
+
+### Phase 5.3 — Proactive Ward Alert Tool ✅
+- [x] `tools/ward_alerts.py` — `scan_ward_alerts(ward_id, threshold, max_patients, ctx)`
+- [x] DEMO_WARDS map: ICU-A → synthea-demo-patient
+- [x] asyncio.gather parallel scan, 5s per-patient timeout, graceful failure handling
+- [x] Evidence Trail per alert, PersonaAdapter applied to summary
+- [x] `get_patients_by_location()` added to fhir_client.py
+- [x] `tests/test_ward_alerts.py` — 10 tests pass
+
+### Phase 5.4 — Meta-Orchestrator Tool ✅
+- [x] `integrations/mcp_client.py` — MCPClient with mock + real HTTP support
+- [x] Mock servers: radiology_mcp, pharmacy_mcp (MOCK_EXTERNAL_MCP=true)
+- [x] `tools/orchestrate.py` — `orchestrate_context_from_sources(patient_id, sources, ctx)`
+- [x] Parallel asyncio.gather for all sources, graceful sources_failed tracking
+- [x] Evidence Trail across all sources, LLM synthesis, PersonaAdapter
+- [x] `tests/test_orchestrate.py` — 10 tests pass
+
+### Phase 6 — Integration ✅
+- [x] `server.py` updated: 9 tools registered (was 7)
+- [x] `.env.example` updated with Phase 5 env vars
+- [x] `PROGRESS.md` updated
+- [x] 125/125 tests pass, zero regressions
+
+---
+
 ## ⚠️ Hal Penting untuk Session Berikutnya
 
 1. **SHARP context** tidak tersedia di MCP Inspector (lokal) — ini NORMAL. Gunakan `MOCK_SHARP=true`.
-2. **Tool 7 sub-calls** di-patch via `tools.lab_results.get_recent_abnormal_labs` (module-level), bukan `tools.cross_domain_insights.get_recent_abnormal_labs`.
-3. **LLM calls** akan return `None` jika `ANTHROPIC_API_KEY` tidak di-set — tools tetap berjalan tanpa crash (graceful degradation).
-4. **HAPI FHIR** public server kadang lambat (~5-10 detik). Timeout default 15 detik.
-5. **Demo patient**: `synthea-demo-patient` di HAPI FHIR public server — Eleanor M. Dawson, 68yo, T2DM + CKD3 + HTN, creatinine rising, NEWS2=6.
-6. **`fhir_client.get_medications()`**: filter `authoredon` dilakukan client-side (HAPI public server tidak support server-side date filter untuk MedicationRequest).
-7. **Sisa yang belum selesai**: Railway deployment + Prompt Opinion registration (butuh akun dan public URL).
+2. **Persona Adapter**: dipanggil HANYA jika `sharp.role` tersedia. Jika tidak ada role, tool mengembalikan `"persona_applied": "physician"` tanpa memanggil LLM.
+3. **Evidence Trail** sekarang ada di output Tool 5 (deterioration) dan Tool 7 (cross_domain). Field: `evidence_trail.overall_confidence`, `evidence_trail.confidence_label`, dll.
+4. **scan_ward_alerts demo**: Gunakan `ward_id="ICU-A"` — sudah terpetakan ke `synthea-demo-patient` di DEMO_WARDS. Set `DEMO_WARD_PATIENTS=ICU-A:synthea-demo-patient` di .env untuk override.
+5. **orchestrate_context_from_sources**: Dengan `MOCK_EXTERNAL_MCP=true`, radiology_mcp dan pharmacy_mcp akan return synthetic data.
+6. **LLM calls** (Gemini) akan return `None` jika `GEMINI_API_KEY` tidak di-set — tools berjalan tanpa crash (graceful degradation).
+7. **HAPI FHIR** public server kadang lambat (~5-10 detik). Timeout default 15 detik.
+8. **Demo patient**: `synthea-demo-patient` di HAPI FHIR public server — Eleanor M. Dawson, 68yo, T2DM + CKD3 + HTN.
+9. **Yang masih perlu dilakukan untuk submission**: Railway redeploy + Prompt Opinion re-register dengan 9 tools + demo video + Devpost update.

@@ -7,11 +7,13 @@ from integrations.fhir_client import FHIRClient, FHIRError
 from integrations.llm_client import LLMClient
 from models.patient import PatientSnapshot, ActiveProblem, Allergy
 from sharp import extract_sharp_context, resolve_patient_id, build_sharp_metadata, log_tool_call, log_sharp_absent
+from persona.adapter import PersonaAdapter
 
 logger = logging.getLogger(__name__)
 
 fhir = FHIRClient()
 llm = LLMClient()
+persona = PersonaAdapter(llm)
 
 
 def _parse_name(patient_resource: dict) -> str:
@@ -206,4 +208,8 @@ async def get_patient_snapshot(patient_id: str, ctx=None) -> dict:
     result["sharp_metadata"] = build_sharp_metadata(sharp)
     if errors:
         result["warnings"] = errors
+    if sharp.role:
+        result = await persona.adapt(result, sharp.role)
+    else:
+        result["persona_applied"] = "physician"
     return result

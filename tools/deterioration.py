@@ -7,11 +7,14 @@ from engine.news2 import calculate_news2
 from engine.mews import calculate_mews
 from models.deterioration import DeteriorationReport, VitalSign
 from sharp import extract_sharp_context, resolve_patient_id, build_sharp_metadata, role_is, log_tool_call, log_sharp_absent
+from evidence.trail import build_vitals_evidence
+from persona.adapter import PersonaAdapter
 
 logger = logging.getLogger(__name__)
 
 fhir = FHIRClient()
 llm = LLMClient()
+persona = PersonaAdapter(llm)
 
 VITAL_SIGNS_LOINC = {
     "8867-4": "heart_rate",
@@ -243,7 +246,19 @@ async def detect_clinical_deterioration_signals(
         latest_vitals_timestamp=latest_ts,
     )
 
+    # Build evidence trail from available vital signs
+    vital_recency = 6.0  # approximate recency for most recent vitals
+    evidence = build_vitals_evidence(
+        {k: v for k, v in latest_vitals.items() if k != "consciousness_str"},
+        recency_hours=vital_recency,
+    )
+
     result = report.model_dump()
     result["latest_vitals"] = {k: v for k, v in latest_vitals.items() if k != "consciousness_str"}
+    result["evidence_trail"] = evidence.model_dump()
     result["sharp_metadata"] = build_sharp_metadata(sharp)
+    if sharp.role:
+        result = await persona.adapt(result, sharp.role)
+    else:
+        result["persona_applied"] = "physician"
     return result

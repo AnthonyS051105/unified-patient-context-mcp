@@ -8,12 +8,14 @@ from integrations.llm_client import LLMClient
 from engine.deduplicator import deduplicate_medications
 from models.medication import MedicationEntry, MedicationTimeline
 from sharp import extract_sharp_context, resolve_patient_id, build_sharp_metadata, role_is, log_tool_call, log_sharp_absent
+from persona.adapter import PersonaAdapter
 
 logger = logging.getLogger(__name__)
 
 fhir = FHIRClient()
 openfda = OpenFDAClient()
 llm = LLMClient()
+persona = PersonaAdapter(llm)
 
 
 def _parse_medication(resource: dict) -> dict:
@@ -154,4 +156,8 @@ async def get_medication_timeline(patient_id: str, days: int = 90, ctx=None) -> 
     )
     result = timeline.model_dump()
     result["sharp_metadata"] = build_sharp_metadata(sharp)
+    if sharp.role:
+        result = await persona.adapt(result, sharp.role)
+    else:
+        result["persona_applied"] = "physician"
     return result

@@ -5,11 +5,13 @@ from integrations.fhir_client import FHIRClient, FHIRError
 from integrations.llm_client import LLMClient
 from models.deterioration import ContextDelta
 from sharp import extract_sharp_context, resolve_patient_id, build_sharp_metadata, log_tool_call, log_sharp_absent
+from persona.adapter import PersonaAdapter
 
 logger = logging.getLogger(__name__)
 
 fhir = FHIRClient()
 llm = LLMClient()
+persona = PersonaAdapter(llm)
 
 
 def _summarize_lab(resource: dict) -> dict:
@@ -132,4 +134,8 @@ async def get_patient_context_delta(patient_id: str, since_hours: int = 48, ctx=
 
     result = delta.model_dump()
     result["sharp_metadata"] = build_sharp_metadata(sharp)
+    if sharp.role:
+        result = await persona.adapt(result, sharp.role)
+    else:
+        result["persona_applied"] = "physician"
     return result

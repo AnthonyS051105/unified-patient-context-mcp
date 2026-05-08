@@ -5,11 +5,13 @@ from integrations.fhir_client import FHIRClient, FHIRError
 from integrations.llm_client import LLMClient
 from models.lab import AbnormalLab, LabTrend
 from sharp import extract_sharp_context, resolve_patient_id, build_sharp_metadata, log_tool_call, log_sharp_absent
+from persona.adapter import PersonaAdapter
 
 logger = logging.getLogger(__name__)
 
 fhir = FHIRClient()
 llm = LLMClient()
+persona = PersonaAdapter(llm)
 
 CRITICAL_CODES = {"HH", "LL", "AA", "A"}
 ABNORMAL_CODES = {"H", "L", "HH", "LL", "A", "AA"}
@@ -235,7 +237,7 @@ async def get_recent_abnormal_labs(
 
     abnormals.sort(key=lambda x: {"critical": 0, "abnormal": 1, "borderline": 2}.get(x.abnormality_level, 3))
 
-    return {
+    result = {
         "patient_id": effective_id,
         "days_queried": days,
         "threshold": threshold,
@@ -245,3 +247,8 @@ async def get_recent_abnormal_labs(
         "data_sources": ["FHIR/Observation"],
         "sharp_metadata": build_sharp_metadata(sharp),
     }
+    if sharp.role:
+        result = await persona.adapt(result, sharp.role)
+    else:
+        result["persona_applied"] = "physician"
+    return result
