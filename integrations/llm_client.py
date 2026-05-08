@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 # Google Gemini via AI Studio — 1500 req/day free tier
 # Get API key: https://aistudio.google.com/apikey
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 GEMINI_API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 
 DEFAULT_TIMEOUT = 20.0
