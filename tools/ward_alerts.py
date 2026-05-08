@@ -58,15 +58,26 @@ def _time_since(ts: Optional[str]) -> str:
         return "unknown"
 
 
-async def _assess_single_patient(patient_id: str, timeout_sec: float = 5.0) -> Optional[dict]:
-    """Run deterioration assessment for one patient with timeout."""
+async def _assess_single_patient(patient_id: str, timeout_sec: float = 10.0) -> Optional[dict]:
+    """Run deterioration + lab assessment for one patient with timeout."""
     import tools.deterioration as _det_mod
+    import tools.lab_results as _lab_mod
     try:
         async with asyncio.timeout(timeout_sec):
-            result = await _det_mod.detect_clinical_deterioration_signals(
-                patient_id=patient_id, hours_lookback=72, ctx=None
+            det_result, lab_result = await asyncio.gather(
+                _det_mod.detect_clinical_deterioration_signals(
+                    patient_id=patient_id, hours_lookback=72, ctx=None
+                ),
+                _lab_mod.get_recent_abnormal_labs(
+                    patient_id=patient_id, days=7, threshold="abnormal", ctx=None
+                ),
+                return_exceptions=True,
             )
-            return result if not result.get("error") else None
+            det = det_result if isinstance(det_result, dict) and not det_result.get("error") else {}
+            labs = lab_result if isinstance(lab_result, dict) and not lab_result.get("error") else {}
+            if not det and not labs:
+                return None
+            return {"deterioration": det, "labs": labs}
     except (asyncio.TimeoutError, Exception) as e:
         logger.warning("Patient assessment failed for [PATIENT_REDACTED]: %s", e)
         return None
@@ -140,9 +151,12 @@ async def scan_ward_alerts(
 
     # Build alerts
     alerts: list[PatientAlert] = []
-    for pid, det_result in zip(patient_ids, results):
-        if isinstance(det_result, Exception) or det_result is None:
+    for pid, assessment in zip(patient_ids, results):
+        if isinstance(assessment, Exception) or assessment is None:
             continue
+
+        det_result = assessment.get("deterioration") or {}
+        lab_result = assessment.get("labs") or {}
 
         news2 = (det_result.get("news2") or {}).get("total_score", 0)
         mews = (det_result.get("mews") or {}).get("total_score", 0)
@@ -150,18 +164,48 @@ async def scan_ward_alerts(
         triggered = det_result.get("triggered_rules", [])
         latest_ts = det_result.get("latest_vitals_timestamp")
 
-        alert_level = _news2_to_alert_level(news2)
-        if alert_level is None:
+        # Lab-based alert escalation
+        abnormal_labs = lab_result.get("abnormal_labs") or []
+        critical_labs = [l for l in abnormal_labs if l.get("abnormality_level") == "critical"]
+        abnormal_only = [l for l in abnormal_labs if l.get("abnormality_level") == "abnormal"]
+
+        news2_level = _news2_to_alert_level(news2)
+
+        # Determine alert level: NEWS2 OR lab-based, take highest severity
+        if critical_labs:
+            lab_alert_level = "high"  # critical labs = high alert even with low NEWS2
+        elif len(abnormal_only) >= 2:
+            lab_alert_level = "medium"
+        else:
+            lab_alert_level = None
+
+        # Pick the more severe of the two
+        candidates = [l for l in [news2_level, lab_alert_level] if l is not None]
+        if not candidates:
             continue
+        alert_level = min(candidates, key=lambda l: ALERT_LEVELS.get(l, 99))
+
         if not _meets_threshold(alert_level, threshold):
             continue
+
+        # Build secondary signals from labs
+        lab_signals = [
+            f"{l['display_name']} {l.get('value', '')} {l.get('unit', '')} ({l['abnormality_level']})".strip()
+            for l in (critical_labs + abnormal_only)[:3]
+        ]
+        secondary = (triggered + lab_signals)[:4]
+
+        # Build primary signal description
+        if critical_labs and news2 == 0:
+            primary_signal = f"{len(critical_labs)} critical lab(s): {critical_labs[0]['display_name']}"
+        else:
+            primary_signal = f"NEWS2={news2}, risk={overall_risk}"
+            if critical_labs:
+                primary_signal += f" + {len(critical_labs)} critical lab(s)"
 
         # Build evidence trail from vitals
         latest_vitals = det_result.get("latest_vitals") or {}
         evidence = build_vitals_evidence(latest_vitals, recency_hours=6.0)
-
-        primary_signal = f"NEWS2={news2}, risk={overall_risk}"
-        secondary = triggered[:3]
 
         action_map = {
             "critical": "Immediate emergency response required",

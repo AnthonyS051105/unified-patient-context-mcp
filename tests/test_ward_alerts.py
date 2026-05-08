@@ -3,17 +3,24 @@ from unittest.mock import AsyncMock, patch, MagicMock
 
 
 def _make_det_result(news2: int, mews: int = 3, risk: str = "high") -> dict:
-    """Build a minimal detect_clinical_deterioration_signals-style result."""
+    """Build a minimal _assess_single_patient-style result (wraps deterioration + labs)."""
     return {
-        "patient_id": "test-patient",
-        "news2": {"total_score": news2, "risk_level": risk},
-        "mews": {"total_score": mews, "risk_level": risk},
-        "triggered_rules": [f"NEWS2 score {news2} — HIGH RISK"],
-        "risk_level": risk,
-        "vital_signs_count": 5,
-        "latest_vitals_timestamp": "2026-05-07T10:00:00Z",
-        "latest_vitals": {"heart_rate": 110, "respiratory_rate": 24},
-        "evidence_trail": None,
+        "deterioration": {
+            "patient_id": "test-patient",
+            "news2": {"total_score": news2, "risk_level": risk},
+            "mews": {"total_score": mews, "risk_level": risk},
+            "triggered_rules": [f"NEWS2 score {news2} — HIGH RISK"],
+            "risk_level": risk,
+            "vital_signs_count": 5,
+            "latest_vitals_timestamp": "2026-05-07T10:00:00Z",
+            "latest_vitals": {"heart_rate": 110, "respiratory_rate": 24},
+            "evidence_trail": None,
+        },
+        "labs": {
+            "abnormal_labs": [],
+            "total_count": 0,
+            "has_critical": False,
+        },
     }
 
 
