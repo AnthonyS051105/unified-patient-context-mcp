@@ -58,6 +58,26 @@ def _time_since(ts: Optional[str]) -> str:
         return "unknown"
 
 
+def _extract_patient_name(patient_resource: dict) -> Optional[str]:
+    names = patient_resource.get("name", [])
+    for name in names:
+        if name.get("use") in ("official", "usual") or not name.get("use"):
+            given = " ".join(name.get("given", []))
+            family = name.get("family", "")
+            full = f"{given} {family}".strip()
+            if full:
+                return full
+    return None
+
+
+async def _fetch_patient_name(patient_id: str) -> Optional[str]:
+    try:
+        resource = await fhir.get_patient(patient_id)
+        return _extract_patient_name(resource)
+    except Exception:
+        return None
+
+
 async def _assess_single_patient(patient_id: str, timeout_sec: float = 10.0) -> Optional[dict]:
     """Run deterioration + lab assessment for one patient with timeout."""
     import tools.deterioration as _det_mod
@@ -144,10 +164,18 @@ async def scan_ward_alerts(
             sharp_metadata=build_sharp_metadata(sharp),
         ).model_dump()
 
-    # Parallel assessment
+    # Parallel assessment + name fetch
     patient_ids = [p.get("id") for p in patients if p.get("id")]
-    tasks = [_assess_single_patient(pid) for pid in patient_ids]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
+    assess_tasks = [_assess_single_patient(pid) for pid in patient_ids]
+    name_tasks = [_fetch_patient_name(pid) for pid in patient_ids]
+    results, patient_names = await asyncio.gather(
+        asyncio.gather(*assess_tasks, return_exceptions=True),
+        asyncio.gather(*name_tasks, return_exceptions=True),
+    )
+    patient_name_map = {
+        pid: (name if isinstance(name, str) else None)
+        for pid, name in zip(patient_ids, patient_names)
+    }
 
     # Build alerts
     alerts: list[PatientAlert] = []
@@ -215,6 +243,7 @@ async def scan_ward_alerts(
 
         alerts.append(PatientAlert(
             patient_id=pid,
+            patient_name=patient_name_map.get(pid),
             alert_level=alert_level,
             news2_score=news2,
             mews_score=mews,
@@ -243,7 +272,8 @@ async def scan_ward_alerts(
 
     # LLM-generated summary
     alert_summary_lines = [
-        f"Patient {a.patient_id}: {a.alert_level} ({a.primary_signal})" for a in alerts[:5]
+        f"Patient {a.patient_name or a.patient_id}: {a.alert_level} ({a.primary_signal})"
+        for a in alerts[:5]
     ]
     summary_prompt = (
         f"A ward scan of '{ward_id}' found {len(alerts)} patient(s) requiring attention "
