@@ -2,7 +2,7 @@
 
 # Nara by NexusHealth — Unified Patient Context MCP Server
 
-# Version: 2.0 — Advanced Features Edition
+# Version: 3.0 — Clinical Pattern Memory Edition
 
 # Hackathon: Agents Assemble — The Healthcare AI Endgame
 
@@ -25,17 +25,18 @@ Di ekosistem healthcare AI saat ini, tiga masalah fundamental belum terpecahkan:
 3. **AI yang reaktif** — Agent hanya menjawab saat ditanya; tidak ada yang memindai
    keseluruhan ward untuk mendeteksi pasien berisiko secara proaktif
 4. **Black box reasoning** — Klinisi tidak tahu _mengapa_ AI menghasilkan rekomendasi tertentu
-5. **Silo antar MCP servers** — Setiap MCP server bekerja sendiri; tidak ada yang
-   mengorkestrasi data lintas server untuk unified insight
+5. **Silo antar MCP servers** — Setiap MCP server bekerja sendiri; tidak ada yang mengorkestrasi data lintas server
+6. **Amnesia per-call** — Setiap AI call bersifat stateless total; tidak ada akumulasi pola dari shift/session sehingga insight tidak semakin kaya seiring waktu
 
 ### Solution Statement (Diperbarui)
 
-Nara adalah **proactive, adaptive, transparent intelligence layer** untuk healthcare AI:
+Nara adalah **proactive, adaptive, transparent, pattern-aware intelligence layer** untuk healthcare AI:
 
 - **Proactive:** Memindai ward dan memberi alert tanpa harus diminta
 - **Adaptive:** Menyesuaikan output secara fundamental berdasarkan role klinisi
 - **Transparent:** Menyertakan evidence trail yang menjelaskan confidence dan sumber data
 - **Interoperable:** Mengorkestrasi MCP server lain untuk unified cross-system context
+- **Pattern-aware:** Mengakumulasi pola klinis anonim selama session dan memberikan konteks historis 🆕
 
 ---
 
@@ -43,16 +44,17 @@ Nara adalah **proactive, adaptive, transparent intelligence layer** untuk health
 
 ### Hackathon Goals (v2.0)
 
-| Goal                      | Metric                            | Target                                     |
-| ------------------------- | --------------------------------- | ------------------------------------------ |
-| Core tools berfungsi      | 7 tools invocable                 | ✅ Done (69 tests)                         |
-| SHARP integration         | Context diekstrak & dipropagasi   | ✅ Done                                    |
-| Adaptive Clinical Persona | Output berbeda per 4 roles        | persona_applied di semua tools             |
-| Proactive Ward Alert      | scan_ward_alerts berjalan         | ≥3 patients di demo                        |
-| Evidence Trail            | Confidence + weights di synthesis | evidence_trail di tools 4,5,7,9            |
-| Meta-Orchestrator         | Call ke external MCP berhasil     | ≥1 mock server integration                 |
-| Total tests               | pytest pass                       | ≥90 tests                                  |
-| Demo quality              | 3 menit di Prompt Opinion         | Complete — semua 4 fitur advanced terlihat |
+| Goal                       | Metric                                 | Target                                     |
+| -------------------------- | -------------------------------------- | ------------------------------------------ |
+| Core tools berfungsi       | 7 tools invocable                      | ✅ Done (69 tests)                         |
+| SHARP integration          | Context diekstrak & dipropagasi        | ✅ Done                                    |
+| Adaptive Clinical Persona  | Output berbeda per 4 roles             | persona_applied di semua tools             |
+| Proactive Ward Alert       | scan_ward_alerts berjalan              | ≥3 patients di demo                        |
+| Evidence Trail             | Confidence + weights di synthesis      | evidence_trail di tools 4,5,7,9            |
+| Meta-Orchestrator          | Call ke external MCP berhasil          | ≥1 mock server integration                 |
+| Clinical Pattern Memory 🆕 | Pattern terakumulasi & query berfungsi | ≥3 patterns tercatat dalam demo session    |
+| Total tests                | pytest pass                            | ≥100 tests                                 |
+| Demo quality               | 3 menit di Prompt Opinion              | Complete — semua 4 fitur advanced terlihat |
 
 ### Impact Goals (Diperbarui)
 
@@ -103,6 +105,15 @@ SAYA INGIN Nara bisa mengambil data dari radiology MCP dan pharmacy MCP
 sekaligus dalam satu panggilan,
 AGAR SAYA tidak perlu mengkoordinasikan multiple tool calls sendiri.
 [→ Meta-Orchestrator]
+```
+
+```
+SEBAGAI sebuah clinical reasoning agent yang menangani banyak pasien dalam satu shift,
+SAYA INGIN tahu apakah pola klinis yang saya lihat pada pasien ini
+juga terlihat pada pasien lain hari ini,
+AGAR SAYA bisa mendeteksi kemungkinan pola ward-level dan mengeskalasi
+ke perhatian sistemik — bukan hanya individual.
+[→ Clinical Pattern Memory]
 ```
 
 ---
@@ -210,6 +221,30 @@ patient output:
 
 ---
 
+### FR-12: Clinical Pattern Memory (`get_pattern_insights`) 🆕
+
+- **HARUS** mengimplementasikan `memory/store.py` dengan `ClinicalPatternMemory` sebagai singleton in-memory store
+- **HARUS** mengimplementasikan `memory/signature.py` dengan `PatternSignature` yang mengekstrak kondisi GENERIK (bukan nilai numerik pasien)
+- **HARUS** menggunakan SHA-256 hash dari sorted conditions sebagai kunci store
+- **TIDAK BOLEH** menyimpan patient_id, nama pasien, atau nilai klinis numerik mentah di store
+- **TIDAK BOLEH** melakukan disk write atau database call apapun — pure in-memory
+- **HARUS** auto-record pattern setiap kali Tool 5 dan Tool 7 dijalankan (background, non-blocking)
+- **HARUS** menyediakan tool `get_pattern_insights(patient_id, conditions?)` untuk query manual
+- **HARUS** menyertakan di setiap response:
+  - `data_scope: "current_session_only"` — selalu ada
+  - `session_reset_note` — menjelaskan bahwa store reset saat restart
+  - `confidence: "low"` jika observations < 5, `"moderate"` jika ≥ 5
+  - `confidence_note` — disclaimer bahwa ini bukan statistical claim
+  - `action_required_by: "clinician"` — selalu ada
+- **HARUS** gracefully return `pattern_found: false` jika belum ada pattern serupa dalam session
+- **BOLEH** dinonaktifkan via `PATTERN_MEMORY_ENABLED=false` environment variable
+- **Contoh kondisi generik yang boleh disimpan:**
+  - `"news2_high_risk"`, `"creatinine_rising_trend"`, `"metformin_present"`, `"active_drug_interaction"`
+- **Contoh yang TIDAK BOLEH disimpan:**
+  - `"creatinine=1.8"` (nilai spesifik), `"patient_eleanor"` (identitas), `"ward_icu_a_bed_3"` (lokasi)
+
+---
+
 ## 5. Non-Functional Requirements (Diperbarui)
 
 ### NFR-01: Performance (Diperbarui)
@@ -260,8 +295,9 @@ _(sama seperti v1.0)_
 | Phase 3: Intelligence          | ✅ Done    | 3 hari       | Tools 5-7, NEWS2/MEWS                     |
 | Phase 4: Deploy & Demo         | ✅ Partial | 2 hari       | Railway, Prompt Opinion                   |
 | **Phase 5: Advanced Features** | 🆕 TODO    | **3 hari**   | **Persona, Evidence, Ward, Orchestrator** |
+| **Phase 5.5: Pattern Memory**  | 🆕 TODO    | **1 hari**   | **Clinical Pattern Memory + Tool 10**     |
 | Phase 6: Integration & Demo    | 🆕 TODO    | 2 hari       | Update demo video, final testing          |
-| **Total**                      |            | **~18 hari** | **Submission-ready v2.0**                 |
+| **Total**                      |            | **~19 hari** | **Submission-ready v3.0**                 |
 
 ### Phase 5 Detail Breakdown:
 
@@ -277,12 +313,16 @@ _(sama seperti v1.0)_
 
 ## 8. Risks & Mitigations (Diperbarui)
 
-| Risk                                          | Likelihood | Impact | Mitigation                                                             |
-| --------------------------------------------- | ---------- | ------ | ---------------------------------------------------------------------- |
-| HAPI FHIR server down                         | Medium     | High   | Cache last-known state                                                 |
-| OpenFDA rate limiting                         | Low        | Medium | Exponential backoff                                                    |
-| Ward scan timeout (>20 patients)              | Medium     | Medium | max_patients cap + timeout per patient                                 |
-| External MCP unavailable                      | High       | Low    | Mock servers sudah direncanakan                                        |
-| Persona output terlalu berbeda (inconsistent) | Medium     | Medium | Prompt templates yang ketat per role                                   |
-| Evidence weights tidak akurat secara klinis   | Medium     | High   | Validasi dengan known clinical scenarios                               |
-| Deadline terlalu mepet (11 Mei)               | High       | High   | Prioritaskan Evidence Trail + Persona dulu, Ward + Meta jika ada waktu |
+| Risk                                          | Likelihood | Impact | Mitigation                                                                        |
+| --------------------------------------------- | ---------- | ------ | --------------------------------------------------------------------------------- |
+| HAPI FHIR server down                         | Medium     | High   | Cache last-known state                                                            |
+| OpenFDA rate limiting                         | Low        | Medium | Exponential backoff                                                               |
+| Ward scan timeout (>20 patients)              | Medium     | Medium | max_patients cap + timeout per patient                                            |
+| External MCP unavailable                      | High       | Low    | Mock servers sudah direncanakan                                                   |
+| Persona output terlalu berbeda (inconsistent) | Medium     | Medium | Prompt templates yang ketat per role                                              |
+| Evidence weights tidak akurat secara klinis   | Medium     | High   | Validasi dengan known clinical scenarios                                          |
+| Persona output terlalu berbeda (inconsistent) | Medium     | Medium | Prompt templates yang ketat per role                                              |
+| Evidence weights tidak akurat secara klinis   | Medium     | High   | Validasi dengan known clinical scenarios                                          |
+| Pattern Memory mengakumulasi terlalu lambat   | Medium     | Medium | Seed dengan 3+ synthetic patients di awal demo session                            |
+| Juri salah mengira Pattern Memory simpan PII  | Low        | High   | Disclaimer eksplisit di setiap response + dokumentasi arsitektur yang jelas       |
+| Deadline terlalu mepet (11 Mei)               | High       | High   | Pattern Memory scope terkecil — implementasi terakhir, bisa skip jika waktu habis |

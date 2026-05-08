@@ -2,7 +2,7 @@
 
 # Nara by NexusHealth — Unified Patient Context MCP Server
 
-# Version: 2.0 — Advanced Features Edition
+# Version: 3.0 — Clinical Pattern Memory Edition
 
 ## Instruksi untuk Claude Code
 
@@ -529,6 +529,502 @@ pytest tests/ -v  # target: 90+ tests pass
 
 ---
 
+### PHASE 5.5 — Clinical Pattern Memory (Hari 3-4, Prioritas #5) 🆕
+
+**Target: `memory/` module + `get_pattern_insights` tool berfungsi, auto-record di tools 5 & 7**
+
+**Estimasi effort: ~4-6 jam** — ini adalah fitur paling compact secara implementasi karena tidak butuh FHIR call, tidak butuh external API. Pure Python in-memory logic.
+
+#### Step 1: Buat `memory/` module
+
+```
+memory/
+├── __init__.py
+├── store.py        # ClinicalPatternMemory singleton
+├── signature.py    # PatternSignature extractor
+├── matcher.py      # PatternMatcher (optional — bisa merge ke store.py)
+└── models.py       # PatternRecord, PatternInsight Pydantic models
+```
+
+**`memory/store.py` — implementasi lengkap:**
+
+```python
+import hashlib
+from threading import Lock
+from datetime import datetime, timezone
+from models.advanced import PatternRecord
+
+class ClinicalPatternMemory:
+    """
+    Thread-safe in-memory pattern store.
+    Singleton — satu instance per server process.
+
+    PRIVACY GUARANTEES:
+    - Keys are SHA-256 hashes of generic conditions, NEVER patient IDs
+    - Values are outcome counts ONLY, no clinical values stored
+    - Store resets on every server restart (no persistence)
+    """
+    _instance = None
+    _lock = Lock()
+
+    def __new__(cls):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._store = {}
+                    cls._instance._store_lock = Lock()
+        return cls._instance
+
+    def record(self, conditions: list[str], outcome: str) -> str:
+        """Record a new pattern observation. Non-blocking. Returns signature."""
+        if not conditions:
+            return ""
+        signature = self._make_signature(conditions)
+        with self._store_lock:
+            if signature not in self._store:
+                self._store[signature] = PatternRecord(
+                    signature=signature,
+                    conditions=sorted(conditions),
+                    outcome_counts={},
+                    first_seen=datetime.now(timezone.utc).isoformat(),
+                    last_seen="",
+                    total_observations=0
+                )
+            record = self._store[signature]
+            record.outcome_counts[outcome] = record.outcome_counts.get(outcome, 0) + 1
+            record.total_observations += 1
+            record.last_seen = datetime.now(timezone.utc).isoformat()
+        return signature
+
+    def query_similar(self, conditions: list[str]) -> PatternRecord | None:
+        """Query for exact pattern match. Returns None if not found."""
+        if not conditions:
+            return None
+        signature = self._make_signature(conditions)
+        with self._store_lock:
+            return self._store.get(signature)
+
+    def get_stats(self) -> dict:
+        """Return store statistics for debugging (no patient data)."""
+        with self._store_lock:
+            return {
+                "total_patterns": len(self._store),
+                "total_observations": sum(r.total_observations for r in self._store.values())
+            }
+
+    def _make_signature(self, conditions: list[str]) -> str:
+        canonical = "|".join(sorted(c.lower().strip() for c in conditions if c))
+        return hashlib.sha256(canonical.encode()).hexdigest()[:16]
+
+# Singleton instance — import ini di semua tools yang butuh pattern memory
+pattern_memory = ClinicalPatternMemory()
+```
+
+**`memory/signature.py` — ekstrak conditions dari clinical data:**
+
+```python
+class PatternSignature:
+    """
+    Ekstrak kondisi GENERIK dari clinical data untuk Pattern Memory.
+
+    ATURAN KRITIS:
+    - Ekstrak KATEGORI, bukan nilai numerik spesifik
+    - BOLEH: "creatinine_rising_trend", "news2_high_risk"
+    - TIDAK BOLEH: "creatinine=1.8", "news2=7", "patient_p001"
+    """
+
+    def from_news2_result(self, score: int, triggered_rules: list[str]) -> list[str]:
+        conditions = []
+        if score >= 7:
+            conditions.append("news2_high_risk")
+        elif score >= 5:
+            conditions.append("news2_medium_risk")
+        elif score >= 1:
+            conditions.append("news2_low_medium_risk")
+        else:
+            conditions.append("news2_low_risk")
+
+        # Normalize triggered rules ke generic labels
+        for rule in triggered_rules:
+            normalized = self._normalize_rule(rule)
+            if normalized:
+                conditions.append(normalized)
+        return conditions
+
+    def from_synthesis_context(self, labs: list, meds: list, vitals_summary: dict) -> list[str]:
+        conditions = []
+
+        # Labs — kategorisasi trend, bukan nilai
+        for lab in labs:
+            name_lower = lab.name.lower() if hasattr(lab, 'name') else ""
+            if "creatinine" in name_lower:
+                trend = getattr(lab, 'trend', None)
+                if trend == "rising":
+                    conditions.append("creatinine_rising_trend")
+                elif trend == "falling":
+                    conditions.append("creatinine_falling_trend")
+            if "hemoglobin" in name_lower or "hgb" in name_lower:
+                conditions.append("abnormal_hemoglobin")
+
+        # Medications — kehadiran, bukan dosis
+        for med in meds:
+            name_lower = med.name.lower() if hasattr(med, 'name') else ""
+            if "metformin" in name_lower:
+                conditions.append("metformin_present")
+            if "warfarin" in name_lower or "coumadin" in name_lower:
+                conditions.append("anticoagulant_present")
+            flags = getattr(med, 'interaction_flags', [])
+            if flags:
+                conditions.append("active_drug_interaction")
+
+        return list(set(conditions))  # deduplicate
+
+    def _normalize_rule(self, rule: str) -> str | None:
+        rule_lower = rule.lower()
+        mappings = {
+            "heart rate": "elevated_heart_rate",
+            "respiratory": "elevated_respiratory_rate",
+            "spo2": "low_oxygen_saturation",
+            "oxygen": "low_oxygen_saturation",
+            "blood pressure": "abnormal_blood_pressure",
+            "temperature": "abnormal_temperature",
+            "consciousness": "altered_consciousness",
+        }
+        for keyword, label in mappings.items():
+            if keyword in rule_lower:
+                return label
+        return None
+
+# Singleton instance
+pattern_signature = PatternSignature()
+```
+
+#### Step 2: Tambahkan PatternRecord dan PatternInsight ke `models/advanced.py`
+
+```python
+# Tambahkan ke models/advanced.py:
+
+class PatternRecord(BaseModel):
+    """Internal — tidak di-expose langsung ke agent."""
+    signature: str
+    conditions: list[str]
+    outcome_counts: dict
+    first_seen: str
+    last_seen: str
+    total_observations: int
+
+class PatternInsight(BaseModel):
+    """Response model untuk get_pattern_insights tool."""
+    pattern_found: bool
+    conditions_checked: list[str] = []
+    signature: str | None = None
+    similar_patterns_seen: int = 0
+    outcome_distribution: dict = {}
+    contextual_insight: str = ""
+    data_scope: str = "current_session_only"
+    session_reset_note: str = "Pattern store resets on server restart. No persistent storage."
+    confidence: Literal["low", "moderate", "none"] = "none"
+    confidence_note: str = "Session-scoped context only — not a statistical claim"
+    action_required_by: str = "clinician"
+    ai_generated: bool = True
+    sharp_metadata: SHARPMetadata = SHARPMetadata()
+```
+
+#### Step 3: Integrasi auto-record ke Tool 5 (`tools/deterioration.py`)
+
+```python
+# Tambahkan import di atas file:
+from memory.store import pattern_memory
+from memory.signature import pattern_signature
+import asyncio
+
+# Di akhir detect_clinical_deterioration_signals(), sebelum return:
+# Auto-record pattern (non-blocking, background)
+if os.getenv("PATTERN_MEMORY_ENABLED", "true") == "true":
+    try:
+        conditions = pattern_signature.from_news2_result(
+            score=report.news2_score,
+            triggered_rules=report.triggered_rules
+        )
+        outcome = "deterioration_high_risk" if report.news2_score >= 7 else \
+                  "deterioration_medium_risk" if report.news2_score >= 5 else "stable"
+        pattern_memory.record(conditions, outcome)
+        # Tambahkan ke report untuk transparansi
+        report.pattern_recorded = True
+        report.pattern_conditions = conditions
+    except Exception:
+        pass  # Pattern recording TIDAK BOLEH block atau error main flow
+```
+
+#### Step 4: Integrasi auto-record ke Tool 7 (`tools/cross_domain_insights.py`)
+
+```python
+# Di akhir synthesize_cross_domain_insights(), sebelum return:
+if os.getenv("PATTERN_MEMORY_ENABLED", "true") == "true":
+    try:
+        conditions = pattern_signature.from_synthesis_context(
+            labs=abnormal_labs,
+            meds=medications,
+            vitals_summary={"deterioration_level": deterioration.risk_level}
+        )
+        outcome = "cross_domain_concern" if insight.confidence_level != "low" else "monitoring"
+        pattern_memory.record(conditions, outcome)
+        insight.pattern_recorded = True
+    except Exception:
+        pass  # Non-blocking
+```
+
+#### Step 5: Buat `tools/pattern_insights.py`
+
+```python
+# tools/pattern_insights.py
+from mcp.server.fastmcp import FastMCP
+from memory.store import pattern_memory
+from memory.signature import pattern_signature
+from models.advanced import PatternInsight
+from sharp.context import extract_sharp_context, resolve_patient_id, build_sharp_metadata
+from integrations.llm_client import llm_client
+import os
+
+@mcp.tool()
+async def get_pattern_insights(
+    patient_id: str,
+    conditions: list[str] | None = None,
+    ctx=None
+) -> PatternInsight:
+    """
+    Query Clinical Pattern Memory for anonymous session-scoped historical context.
+
+    Returns pattern observations from current session only.
+    No patient data is stored — only anonymous clinical condition hashes.
+    Store resets on server restart.
+
+    Args:
+        patient_id: FHIR Patient resource ID (used to fetch conditions if not provided)
+        conditions: Optional list of generic clinical conditions to query.
+                    If not provided, will be derived from patient's latest deterioration data.
+    """
+    sharp = extract_sharp_context(ctx)
+
+    if not os.getenv("PATTERN_MEMORY_ENABLED", "true") == "true":
+        return PatternInsight(
+            pattern_found=False,
+            message="Pattern Memory is disabled on this server.",
+            conditions_checked=[]
+        )
+
+    # Gunakan conditions yang di-pass, atau derive dari FHIR
+    effective_conditions = conditions
+    if not effective_conditions:
+        # Ambil dari deterioration report pasien ini
+        try:
+            from integrations.fhir_client import fhir_client as fc
+            effective_id = resolve_patient_id(sharp, patient_id)
+            vitals = await fc.get_observations(effective_id, category="vital-signs", days=3)
+            # Parse minimal untuk dapat NEWS2 approximation
+            effective_conditions = ["current_patient_pattern"]  # fallback generic
+        except Exception:
+            effective_conditions = []
+
+    if not effective_conditions:
+        return PatternInsight(
+            pattern_found=False,
+            conditions_checked=[],
+            contextual_insight="No conditions available to query pattern memory.",
+            sharp_metadata=build_sharp_metadata(sharp)
+        )
+
+    # Query memory
+    past = pattern_memory.query_similar(effective_conditions)
+
+    if not past or past.total_observations == 0:
+        return PatternInsight(
+            pattern_found=False,
+            conditions_checked=effective_conditions,
+            contextual_insight="No similar patterns observed in current session yet. This is the first occurrence.",
+            sharp_metadata=build_sharp_metadata(sharp)
+        )
+
+    # Hitung distribusi outcome
+    total = past.total_observations
+    distribution = {k: f"{(v/total*100):.0f}%" for k, v in past.outcome_counts.items()}
+
+    # Generate LLM explanation
+    insight_text = await llm_client.explain(
+        prompt=f"""You are a clinical decision support AI analyzing session pattern data.
+
+Pattern observed: {past.conditions}
+Times seen this session: {total}
+Outcome distribution: {distribution}
+
+Write 2-3 sentences explaining this pattern context for a clinician.
+Rules:
+- NEVER say "diagnose" or "diagnosis"
+- ALWAYS note this is session-scoped context only
+- ALWAYS note clinician judgment is required
+- Keep it factual and hedged appropriately""",
+        max_tokens=150
+    )
+
+    confidence = "moderate" if total >= 5 else "low"
+
+    return PatternInsight(
+        pattern_found=True,
+        conditions_checked=effective_conditions,
+        signature=past.signature,
+        similar_patterns_seen=total,
+        outcome_distribution=distribution,
+        contextual_insight=insight_text or f"This pattern has been observed {total} time(s) this session.",
+        data_scope="current_session_only",
+        session_reset_note="Pattern store resets on server restart. No persistent storage of any kind.",
+        confidence=confidence,
+        confidence_note=f"Based on {total} session observation(s) only — not a validated statistical claim.",
+        action_required_by="clinician",
+        ai_generated=True,
+        sharp_metadata=build_sharp_metadata(sharp)
+    )
+```
+
+#### Step 6: Register tool di `server.py`
+
+```python
+from tools.pattern_insights import get_pattern_insights
+```
+
+#### Step 7: Tulis `tests/test_pattern_memory.py`
+
+```python
+# tests/test_pattern_memory.py
+import pytest
+from memory.store import ClinicalPatternMemory
+from memory.signature import PatternSignature
+
+# Reset singleton state sebelum setiap test
+@pytest.fixture(autouse=True)
+def reset_memory():
+    memory = ClinicalPatternMemory()
+    memory._store.clear()
+    yield
+    memory._store.clear()
+
+def test_record_and_query_exact_match():
+    memory = ClinicalPatternMemory()
+    conditions = ["news2_high_risk", "creatinine_rising_trend"]
+    memory.record(conditions, "deterioration")
+    result = memory.query_similar(conditions)
+    assert result is not None
+    assert result.total_observations == 1
+    assert result.outcome_counts["deterioration"] == 1
+
+def test_record_accumulates_multiple_observations():
+    memory = ClinicalPatternMemory()
+    conditions = ["creatinine_rising_trend", "metformin_present"]
+    memory.record(conditions, "deterioration")
+    memory.record(conditions, "deterioration")
+    memory.record(conditions, "stable")
+    result = memory.query_similar(conditions)
+    assert result.total_observations == 3
+    assert result.outcome_counts["deterioration"] == 2
+    assert result.outcome_counts["stable"] == 1
+
+def test_query_returns_none_if_no_match():
+    memory = ClinicalPatternMemory()
+    result = memory.query_similar(["nonexistent_condition"])
+    assert result is None
+
+def test_signature_is_order_independent():
+    memory = ClinicalPatternMemory()
+    sig = PatternSignature()
+    conditions_a = ["creatinine_rising_trend", "metformin_present"]
+    conditions_b = ["metformin_present", "creatinine_rising_trend"]
+    # Urutan berbeda → hash yang sama
+    assert memory._make_signature(conditions_a) == memory._make_signature(conditions_b)
+
+def test_no_patient_data_in_store():
+    memory = ClinicalPatternMemory()
+    memory.record(["news2_high_risk"], "deterioration")
+    # Pastikan tidak ada nilai yang menyerupai PII di store
+    for sig, record in memory._store.items():
+        assert "patient" not in sig.lower()
+        for condition in record.conditions:
+            assert "=" not in condition  # tidak ada "creatinine=1.8"
+            assert any(char.isalpha() for char in condition)  # bukan angka murni
+
+def test_singleton_shared_across_instances():
+    memory_a = ClinicalPatternMemory()
+    memory_b = ClinicalPatternMemory()
+    memory_a.record(["test_condition"], "outcome_a")
+    result = memory_b.query_similar(["test_condition"])
+    assert result is not None  # same instance
+
+def test_pattern_signature_from_news2():
+    sig = PatternSignature()
+    conditions = sig.from_news2_result(score=8, triggered_rules=["HR > 110", "SpO2 < 95%"])
+    assert "news2_high_risk" in conditions
+    assert "elevated_heart_rate" in conditions
+    assert "low_oxygen_saturation" in conditions
+
+def test_pattern_signature_no_numeric_values():
+    sig = PatternSignature()
+    conditions = sig.from_news2_result(score=7, triggered_rules=["RR > 25"])
+    for condition in conditions:
+        assert "7" not in condition  # score numerik tidak masuk ke condition
+        assert ">" not in condition  # operator tidak masuk
+
+@pytest.mark.asyncio
+async def test_get_pattern_insights_returns_not_found_if_empty():
+    from tools.pattern_insights import get_pattern_insights
+    # Memory kosong → pattern_found=False
+    result = await get_pattern_insights(
+        patient_id="test-patient",
+        conditions=["very_rare_condition_xyz"]
+    )
+    assert result.pattern_found == False
+
+@pytest.mark.asyncio
+async def test_get_pattern_insights_returns_context_after_recording():
+    from memory.store import pattern_memory
+    from tools.pattern_insights import get_pattern_insights
+    # Seed memory dulu
+    pattern_memory.record(["creatinine_rising_trend", "metformin_present"], "deterioration")
+    pattern_memory.record(["creatinine_rising_trend", "metformin_present"], "deterioration")
+
+    result = await get_pattern_insights(
+        patient_id="test-patient",
+        conditions=["creatinine_rising_trend", "metformin_present"]
+    )
+    assert result.pattern_found == True
+    assert result.similar_patterns_seen == 2
+    assert result.action_required_by == "clinician"
+    assert result.data_scope == "current_session_only"
+
+def test_get_stats_returns_no_pii():
+    memory = ClinicalPatternMemory()
+    memory.record(["test_condition"], "test_outcome")
+    stats = memory.get_stats()
+    assert "total_patterns" in stats
+    assert "total_observations" in stats
+    # Stats tidak mengandung data pasien
+    assert "patient" not in str(stats)
+```
+
+**Verifikasi Phase 5.5 selesai:**
+
+```bash
+pytest tests/test_pattern_memory.py -v  # semua 10+ tests pass
+pytest tests/ -v  # target: 100+ tests total, tidak ada regresi
+
+# Verify auto-recording bekerja:
+# 1. Jalankan server: MOCK_SHARP=true python main.py
+# 2. Panggil tool 5 beberapa kali via MCP Inspector
+# 3. Panggil get_pattern_insights → harus muncul "similar_patterns_seen > 0"
+
+# MCP Inspector: 10 tools terlihat (tools 1-9 + get_pattern_insights)
+```
+
+---
+
 ## PHASE 6: Integration, Polish & Demo (Hari 4-5)
 
 ### Phase 6.1 — Full Integration Test
@@ -560,46 +1056,44 @@ git add . && git commit -m "feat: advanced features v2.0" && git push
 - Complete Publisher Profile → Publish ke Marketplace (ini wajib untuk submission!)
 - Test 9 tools via Prompt Opinion Launchpad dengan real agent
 
-### Phase 6.3 — Demo Video Recording v2.0
+### Phase 6.3 — Demo Video Recording v3.0
 
-**Script demo 3 menit (DIUPDATE untuk fitur advanced):**
+**Script demo 3 menit (DIUPDATE — 5 fitur advanced):**
 
 ```
-[0:00-0:20] PROBLEM STATEMENT (slide + narasi)
+[0:00-0:20] PROBLEM STATEMENT
   "Dokter menghabiskan 36 menit di EHR per kunjungan 30 menit.
-   AI yang ada bersifat reaktif dan memberikan output yang sama
-   untuk semua orang. Nara hadir untuk mengubah itu."
+   AI yang ada reaktif, tidak belajar, dan memberi output yang sama untuk semua orang."
 
-[0:20-0:50] FITUR 1: PROACTIVE WARD ALERT
-  Ketik di Prompt Opinion: "Siapa yang perlu perhatian di ward ICU-A sekarang?"
-  Agent calls: scan_ward_alerts(ward_id="ICU-A", threshold="high")
-  Tunjukkan: 2 patients diprioritaskan dalam format nurse-friendly (bullets)
-  Highlight: "Tanpa diminta, Nara sudah tahu siapa yang butuh perhatian."
+[0:20-0:45] FITUR 1: PROACTIVE WARD ALERT
+  "Siapa yang perlu perhatian di ward ICU-A sekarang?"
+  → scan_ward_alerts → 2 patients diprioritaskan
+  Highlight: "Proaktif tanpa diminta."
 
-[0:50-1:30] FITUR 2: AI SYNTHESIS + EVIDENCE TRAIL (KLIMAKS)
-  Ketik: "Apakah kreatinin Eleanor berhubungan dengan obat barunya?"
-  Agent calls: synthesize_cross_domain_insights + evidence_trail
-  Tunjukkan: narrative synthesis + confidence 0.74 + data gaps
-  Highlight: "Nara tidak hanya menjawab — ia menunjukkan MENGAPA ia yakin."
+[0:45-1:15] FITUR 2: AI SYNTHESIS + EVIDENCE TRAIL
+  "Apakah kreatinin Eleanor berhubungan dengan obat barunya?"
+  → synthesize_cross_domain_insights → narrative + confidence 0.74 + data gaps
+  Highlight: "Transparan — Nara menunjukkan mengapa ia yakin."
 
-[1:30-2:00] FITUR 3: ADAPTIVE PERSONA (SIDE BY SIDE)
-  Tunjukkan query yang sama, dua role berbeda:
-  - Role=physician → narrative klinis panjang
-  - Role=nurse → bullet points + thresholds angka
-  Highlight: "Output berbeda secara fundamental, bukan hanya bahasanya."
+[1:15-1:45] FITUR 3: CLINICAL PATTERN MEMORY ⭐ KLIMAKS BARU
+  "Apakah pola ini pernah terlihat hari ini?"
+  → get_pattern_insights → "Pola ini terlihat 3 kali session ini. 67% menuju deterioration."
+  Highlight: "Nara belajar dari shift ini tanpa menyimpan satu pun data pasien.
+              Keys adalah hash anonim. Store reset setiap restart."
 
-[2:00-2:30] FITUR 4: META-ORCHESTRATOR
-  Ketik: "Berikan saya gambaran lengkap Eleanor dari semua sistem"
-  Agent calls: orchestrate_context_from_sources(sources=["nara_core","radiology_mcp"])
-  Tunjukkan: unified context dari 2 MCP servers berbeda
+[1:45-2:10] FITUR 4: ADAPTIVE PERSONA
+  Query sama, physician vs nurse → output berbeda secara fundamental
+  Highlight: "Adaptif — bukan hanya bahasa, tapi seluruh struktur informasi."
+
+[2:10-2:40] FITUR 5: META-ORCHESTRATOR
+  → orchestrate_context_from_sources → unified context dari 2 MCP servers
   Highlight: "Satu-satunya MCP server yang mengorkestrasi server lain."
 
-[2:30-3:00] CLOSING
-  Tampilkan: 9 tools di Prompt Opinion Marketplace
-  Narasi: "Nara by NexusHealth.
-           Proactive. Adaptive. Transparent. Interoperable.
-           One call. Full picture."
-  Tagline: SHARP-compliant | FHIR R4 | Evidence-based | Multi-MCP
+[2:40-3:00] CLOSING
+  "Nara by NexusHealth.
+   Proactive. Adaptive. Transparent. Pattern-aware. Interoperable.
+   One call. Full picture."
+  Tagline: SHARP-compliant | FHIR R4 | Evidence-based | Pattern Memory | Multi-MCP
 ```
 
 ### Phase 6.4 — Update Devpost Submission
@@ -615,7 +1109,7 @@ Update description di Devpost untuk mencakup:
 
 ---
 
-## Checklist Final Sebelum Submit (v2.0)
+## Checklist Final Sebelum Submit (v3.0)
 
 **Existing (sudah done):**
 
@@ -629,12 +1123,15 @@ Update description di Devpost untuk mencakup:
 - [ ] `persona/` module complete + terintegrasi ke semua 7 tools
 - [ ] `scan_ward_alerts` (tool 8) berfungsi dengan ≥2 synthetic patients
 - [ ] `orchestrate_context_from_sources` (tool 9) berfungsi dengan mock MCPs
-- [ ] pytest: ≥90 tests pass, tidak ada regresi
-- [ ] Semua 9 tools terlihat di MCP Inspector
-- [ ] Railway redeployed dengan env vars baru (MOCK_EXTERNAL_MCP, WARD_SCAN_MAX_PATIENTS)
-- [ ] Prompt Opinion: 9 tools verified di platform, Published ke Marketplace
-- [ ] Demo video v2.0 direkam (3 menit, 4 fitur advanced terlihat)
-- [ ] Devpost submission form updated (description, video link, marketplace URL)
-- [ ] README.md updated dengan 9 tools + advanced features dokumentasi
+- [ ] `memory/` module complete — store, signature, PatternRecord, PatternInsight
+- [ ] `get_pattern_insights` (tool 10) berfungsi — query returns hasil setelah beberapa tool 5/7 calls
+- [ ] Tool 5 & 7 auto-record pattern ke memory (non-blocking)
+- [ ] pytest: ≥100 tests pass, tidak ada regresi
+- [ ] Semua 10 tools terlihat di MCP Inspector
+- [ ] Railway redeployed dengan env vars baru (MOCK_EXTERNAL_MCP, PATTERN_MEMORY_ENABLED, dll.)
+- [ ] Prompt Opinion: 10 tools verified di platform, Published ke Marketplace
+- [ ] Demo video v3.0 direkam (3 menit, 5 fitur advanced terlihat termasuk Pattern Memory)
+- [ ] Devpost submission form updated (description mention Pattern Memory + privacy guarantee)
+- [ ] README.md updated dengan 10 tools + semua advanced features dokumentasi
 
 **Hard deadline:** 11 Mei 2026 23:00 EDT = 12 Mei 2026 10:00 WIB

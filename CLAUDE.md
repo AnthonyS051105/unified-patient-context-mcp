@@ -4,7 +4,7 @@
 
 # Hackathon: Agents Assemble — The Healthcare AI Endgame (Devpost)
 
-# Version: 2.0 — Advanced Features Edition
+# Version: 3.0 — Clinical Pattern Memory Edition
 
 ## 🎯 MISI PROYEK
 
@@ -13,13 +13,14 @@ Bangun sebuah MCP (Model Context Protocol) server bernama **"Nara"** oleh **Nexu
 
 Tagline: _"One call. Full picture."_
 
-Server ini tidak hanya mengaggregasi data — ia **berpikir, beradaptasi, dan berproaktif**:
+Server ini tidak hanya mengaggregasi data — ia **berpikir, beradaptasi, berproaktif, dan belajar**:
 
 - Mengaggregasi data dari FHIR EHR, lab, obat, dan sinyal deteriorasi klinis
 - Menyesuaikan output secara cerdas berdasarkan role klinisi (Adaptive Clinical Persona)
 - Memberikan peringatan ward-level secara proaktif tanpa harus ditanya (Proactive Alert)
 - Mengorkestrasi MCP server lain untuk data yang lebih kaya (Meta-Orchestrator)
 - Menyertakan jejak bukti yang transparan di setiap insight (Confidence-Weighted Evidence Trail)
+- **Mengenali pola klinis dari session dan memberikan konteks historis anonim (Clinical Pattern Memory)** 🆕
 
 Tujuan akhir: **Memenangkan hackathon Agents Assemble ($7,500 Grand Prize)**
 
@@ -28,12 +29,13 @@ Tujuan akhir: **Memenangkan hackathon Agents Assemble ($7,500 Grand Prize)**
 ## 📋 KRITERIA JURI (SELALU INGAT INI)
 
 1. **AI Factor** — AI HARUS melakukan sesuatu yang TIDAK BISA dilakukan rule-based software biasa.
-   Di proyek ini, AI berperan dalam LIMA cara yang genuinely irreplaceable:
+   Di proyek ini, AI berperan dalam ENAM cara yang genuinely irreplaceable:
    - **Semantic Entity Resolution**: Mendeteksi "Metformin HCl 500mg" = "Glucophage" tanpa lookup table
    - **Cross-Domain Clinical Synthesis**: Menghubungkan lab + obat + vitals secara bersamaan
    - **Adaptive Clinical Persona**: Mengubah depth, prioritas, dan format output berdasarkan role
    - **Proactive Pattern Detection**: Mendeteksi pasien berisiko di seluruh ward tanpa diminta
    - **Evidence-Weighted Reasoning**: Menghitung dan menampilkan confidence per sumber data
+   - **Clinical Pattern Memory**: Mengenali pola klinis anonim dari session dan mengkontekstualisasikan insight baru berdasarkan pola historis yang sudah terlihat 🆕
 
 2. **Potential Impact** — Solusi menyentuh SETIAP interaksi klinisi-pasien, bukan edge case.
    Dokter menghabiskan 36 menit di EHR per kunjungan 30 menit. Nara memotong ini menjadi detik.
@@ -82,7 +84,15 @@ unified-patient-mcp/
 │   ├── context_delta.py         # tool 6: get_patient_context_delta
 │   ├── cross_domain_insights.py # tool 7: synthesize_cross_domain_insights ⭐
 │   ├── ward_alerts.py           # tool 8: scan_ward_alerts 🆕 PROACTIVE
-│   └── orchestrate.py           # tool 9: orchestrate_context_from_sources 🆕 META
+│   ├── orchestrate.py           # tool 9: orchestrate_context_from_sources 🆕 META
+│   └── pattern_insights.py      # tool 10: get_pattern_insights 🆕 MEMORY
+│
+├── memory/                      # 🆕 Clinical Pattern Memory engine
+│   ├── __init__.py
+│   ├── store.py                 # ClinicalPatternMemory — in-memory pattern store
+│   ├── signature.py             # PatternSignature — hashing clinical patterns
+│   ├── matcher.py               # PatternMatcher — find similar past patterns
+│   └── models.py                # PatternInsight, PatternRecord Pydantic models
 │
 ├── persona/                     # 🆕 Adaptive Clinical Persona engine
 │   ├── __init__.py
@@ -131,6 +141,7 @@ unified-patient-mcp/
 │   ├── test_persona.py          # 🆕 unit tests Adaptive Persona
 │   ├── test_evidence.py         # 🆕 unit tests Evidence Trail
 │   ├── test_ward_alerts.py      # 🆕 unit tests Ward Alerts
+│   ├── test_pattern_memory.py   # 🆕 unit tests Clinical Pattern Memory
 │   └── fixtures/
 │       ├── synthea_patient.json # Eleanor M. Dawson bundle ✅
 │       └── test_patients.json   # patient IDs ✅
@@ -365,6 +376,101 @@ langsung dari prinsip tersebut — sesuatu yang hampir tidak ada submission lain
 
 ---
 
+### FITUR 5: Clinical Pattern Memory 🆕
+
+**File:** `memory/store.py`, `memory/signature.py`, `memory/matcher.py`, `tools/pattern_insights.py`
+
+**Tool baru: `get_pattern_insights(patient_id, conditions)`**
+
+Ini adalah fitur yang paling membedakan Nara secara fundamental dari semua submission lain.
+Seluruh Nara v1.0 dan v2.0 bersifat stateless — setiap call fresh fetch, tidak ada yang diingat.
+Pattern Memory menambahkan **lapisan memori anonim session-level** yang menyimpan _pola klinis_,
+bukan data pasien. Perbedaan krusial yang tidak bisa diserang dari sisi privasi:
+
+```
+Yang TIDAK disimpan:  "Pasien Eleanor punya kreatinin 1.8"   ← PII
+Yang DISIMPAN:        hash("creatinine_rise_80pct|new_metformin|urine_decrease")
+                      → outcome_seen: "deterioration" (3x dalam session)
+```
+
+**Prinsip Privasi yang Tidak Bisa Diserang:**
+
+- Pattern store adalah **in-memory only** — reset setiap server restart
+- Kunci store adalah **cryptographic hash** dari kombinasi kondisi klinis, bukan ID pasien
+- Tidak ada cara untuk reverse-engineer siapa pasien dari hash tersebut
+- Sepenuhnya stateless dari perspektif persistent storage
+- Sesuai penuh dengan syarat kompetisi (zero real PHI)
+
+**Flow Kerja Pattern Memory:**
+
+```
+Setiap kali Tool 5 atau 7 dijalankan pada pasien:
+    │
+    ▼
+[PatternSignature] ekstrak kondisi klinis → buat signature hash
+  conditions = ["creatinine_rise_80pct", "new_metformin", "urine_decrease"]
+  signature  = sha256(sorted(conditions).join("|")) → "a3f7b2c1..."
+    │
+    ▼
+[PatternMatcher] cari signature serupa yang sudah pernah disimpan
+  → Match found: 2 pola serupa, outcome = "deterioration"
+    │
+    ▼
+[ClinicalPatternMemory.record()] simpan pola baru ke in-memory store
+    │
+    ▼
+[get_pattern_insights()] kembalikan konteks historis session ke agent
+```
+
+**Output Tool:**
+
+```json
+{
+  "current_pattern": {
+    "signature": "a3f7b2c1...",
+    "conditions": [
+      "creatinine_rise_80pct",
+      "new_metformin",
+      "urine_decreasing"
+    ],
+    "pattern_label": "Renal stress with nephrotoxic exposure"
+  },
+  "session_context": {
+    "similar_patterns_seen": 3,
+    "outcome_distribution": {
+      "deterioration_detected": "67%",
+      "stable_monitoring": "33%"
+    },
+    "median_time_to_change_hours": 31,
+    "confidence": "low",
+    "confidence_note": "Based on 3 session observations only — not a statistical claim"
+  },
+  "contextual_insight": "This pattern has appeared 3 times this session. In 2 of 3 cases, deterioration was subsequently detected within ~31 hours. Treat as a weak signal requiring clinical judgment.",
+  "data_scope": "current_session_only",
+  "session_reset_note": "Pattern store resets on server restart. No persistent storage of any kind.",
+  "action_required_by": "clinician",
+  "ai_generated": true
+}
+```
+
+**Integrasi ke Tool 7 — Pattern auto-recorded saat synthesis berjalan:**
+
+```python
+# Di synthesize_cross_domain_insights(), setelah synthesis selesai:
+signature = pattern_signature.create(labs=labs, meds=medications, vitals=vitals)
+past_context = pattern_memory.query_similar(signature)
+pattern_memory.record(signature, outcome_hint="deterioration_signals_present")
+insight.pattern_context = past_context  # null jika belum ada pattern serupa
+```
+
+**Kenapa ini Genuinely Irreplaceable:**
+Rule engine bisa flag pola pada satu pasien. Tapi HANYA AI + Pattern Memory yang bisa berkata:
+_"Pola ini terlihat 3 kali hari ini pada pasien berbeda — ini bukan anomali satu orang,
+ini kemungkinan pola ward-level yang perlu perhatian sistemik."_
+Ini insight yang hanya muncul dari akumulasi observasi lintas pasien dalam satu shift.
+
+---
+
 ### FITUR 4: Meta-Orchestrator Tool
 
 **File:** `tools/orchestrate.py`, `integrations/mcp_client.py`
@@ -441,21 +547,22 @@ menjadikannya true interoperability hub, bukan hanya endpoint.
 
 ---
 
-## 🔧 TOOLS LENGKAP NARA v2.0 (11 Tools Total)
+## 🔧 TOOLS LENGKAP NARA v3.0 (12 Tools Total)
 
-| #   | Tool                                             | Status   | Fitur Advanced                        |
-| --- | ------------------------------------------------ | -------- | ------------------------------------- |
-| 1   | `get_patient_snapshot`                           | ✅ Done  | + Persona + Evidence Trail            |
-| 2   | `get_active_problems`                            | ✅ Done  | + Persona (role-aware prioritization) |
-| 3   | `get_medication_timeline`                        | ✅ Done  | + Persona + Evidence Trail            |
-| 4   | `get_recent_abnormal_labs`                       | ✅ Done  | + Evidence Trail                      |
-| 5   | `detect_clinical_deterioration_signals`          | ✅ Done  | + Persona + Evidence Trail            |
-| 6   | `get_patient_context_delta`                      | ✅ Done  | + Persona                             |
-| 7   | `synthesize_cross_domain_insights`               | ✅ Done  | + Persona + Evidence Trail            |
-| 8   | `scan_ward_alerts`                               | 🆕 Build | Proactive Alert (Ward-level)          |
-| 9   | `orchestrate_context_from_sources`               | 🆕 Build | Meta-Orchestrator                     |
-| 10  | _(persona sudah embedded di semua tools)_        | 🆕 Build | Adaptive Clinical Persona             |
-| 11  | _(evidence trail sudah embedded di semua tools)_ | 🆕 Build | Evidence Trail                        |
+| #   | Tool                                             | Status   | Fitur Advanced                                                |
+| --- | ------------------------------------------------ | -------- | ------------------------------------------------------------- |
+| 1   | `get_patient_snapshot`                           | ✅ Done  | + Persona + Evidence Trail                                    |
+| 2   | `get_active_problems`                            | ✅ Done  | + Persona (role-aware prioritization)                         |
+| 3   | `get_medication_timeline`                        | ✅ Done  | + Persona + Evidence Trail                                    |
+| 4   | `get_recent_abnormal_labs`                       | ✅ Done  | + Evidence Trail                                              |
+| 5   | `detect_clinical_deterioration_signals`          | ✅ Done  | + Persona + Evidence Trail + Pattern Record                   |
+| 6   | `get_patient_context_delta`                      | ✅ Done  | + Persona                                                     |
+| 7   | `synthesize_cross_domain_insights`               | ✅ Done  | + Persona + Evidence Trail + Pattern Record + Pattern Context |
+| 8   | `scan_ward_alerts`                               | 🆕 Build | Proactive Alert (Ward-level)                                  |
+| 9   | `orchestrate_context_from_sources`               | 🆕 Build | Meta-Orchestrator                                             |
+| 10  | `get_pattern_insights`                           | 🆕 Build | Clinical Pattern Memory ⭐⭐                                  |
+| 11  | _(persona sudah embedded di semua tools)_        | 🆕 Build | Adaptive Clinical Persona                                     |
+| 12  | _(evidence trail sudah embedded di semua tools)_ | 🆕 Build | Evidence Trail                                                |
 
 ---
 
@@ -469,6 +576,7 @@ menjadikannya true interoperability hub, bukan hanya endpoint.
 6. **Async throughout** — httpx AsyncClient, asyncio.gather untuk parallel calls
 7. **Persona transparency** — Selalu sertakan `persona_applied` di response
 8. **Evidence transparency** — Selalu sertakan `evidence_trail` di synthesis tools
+9. **Pattern privacy** — Pattern Memory hanya simpan hash anonim, TIDAK PERNAH simpan patient_id atau nilai klinis mentah 🆕
 
 ---
 
@@ -487,6 +595,8 @@ MOCK_SHARP_ROLE=physician
 MOCK_EXTERNAL_MCP=true       # 🆕 mock radiology/pharmacy MCP untuk demo
 WARD_SCAN_MAX_PATIENTS=20    # 🆕 batas scan per ward
 EVIDENCE_MIN_DATAPOINTS=2    # 🆕 minimum data points untuk high confidence
+PATTERN_MEMORY_ENABLED=true  # 🆕 aktifkan Clinical Pattern Memory
+PATTERN_SIMILARITY_THRESHOLD=0.8  # 🆕 minimum similarity untuk pattern match
 ```
 
 ---
@@ -505,22 +615,27 @@ EVIDENCE_MIN_DATAPOINTS=2    # 🆕 minimum data points untuk high confidence
 - [ ] `evidence/` module complete — EvidenceTrail populated di tools 4,5,7
 - [ ] `scan_ward_alerts` tool berfungsi dengan ≥3 synthetic patients
 - [ ] `orchestrate_context_from_sources` berfungsi (dengan mock external MCPs)
+- [ ] `memory/` module complete — PatternMemory store, signature, matcher berfungsi
+- [ ] `get_pattern_insights` tool berfungsi dan pattern terakumulasi saat tool 5 & 7 dijalankan
 - [ ] Semua tools 1-7 sudah embed Persona + Evidence Trail
-- [ ] pytest semua advanced tests pass (target: 90+ total tests)
-- [ ] Demo video diupdate untuk menampilkan fitur advanced
+- [ ] Tool 5 & 7 auto-record pattern ke memory saat dijalankan
+- [ ] pytest semua advanced tests pass (target: 100+ total tests)
+- [ ] Demo video diupdate untuk menampilkan semua 5 fitur advanced
 
 ---
 
 ## 🎬 SKENARIO DEMO v2.0 (3 MENIT — DIUPDATE)
 
 1. (0:00-0:20) Problem — 36 menit di EHR. Data tersebar. AI tidak tahu siapa yang butuh perhatian.
-2. (0:20-0:50) **scan_ward_alerts** → "2 pasien butuh perhatian segera" — PROAKTIF tanpa diminta
-   Tunjukkan: persona nurse = actionable bullets, bukan medical jargon
-3. (0:50-1:30) **synthesize_cross_domain_insights** + **Evidence Trail** →
+2. (0:20-0:45) **scan_ward_alerts** → "2 pasien butuh perhatian segera" — PROAKTIF tanpa diminta
+3. (0:45-1:15) **synthesize_cross_domain_insights** + **Evidence Trail** →
    "Is creatinine related to metformin?" → AI synthesis + confidence 0.74 + data gaps
-   Ini KLIMAKS — tunjukkan evidence trail yang transparan
-4. (1:30-2:00) **Adaptive Persona** demo side-by-side →
-   Query yang sama, role berbeda (physician vs nurse) → output berbeda secara fundamental
-5. (2:00-2:30) **orchestrate_context_from_sources** → Nara memanggil radiology MCP →
-   Unified context dari 2 server berbeda dalam satu call
-6. (2:30-3:00) Closing — "Nara by NexusHealth. Proactive. Adaptive. Transparent. Interoperable."
+4. (1:15-1:40) **get_pattern_insights** — KLIMAKS BARU ⭐ →
+   "Pola ini terlihat 3 kali hari ini pada pasien berbeda — kemungkinan pola ward-level"
+   Highlight: "Nara belajar dari shift ini tanpa menyimpan satu pun data pasien."
+5. (1:40-2:05) **Adaptive Persona** side-by-side →
+   Query sama, role physician vs nurse → output berbeda secara fundamental
+6. (2:05-2:35) **orchestrate_context_from_sources** →
+   Unified context dari 2 MCP servers berbeda dalam satu call
+7. (2:35-3:00) Closing — "Nara by NexusHealth. Proactive. Adaptive. Transparent. Pattern-aware."
+   Tagline: SHARP-compliant | FHIR R4 | Evidence-based | Multi-MCP | Pattern Memory
