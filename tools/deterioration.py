@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Optional
 
 from integrations.fhir_client import FHIRClient, FHIRError
@@ -9,6 +10,8 @@ from models.deterioration import DeteriorationReport, VitalSign
 from sharp import extract_sharp_context, resolve_patient_id, build_sharp_metadata, role_is, log_tool_call, log_sharp_absent
 from evidence.trail import build_vitals_evidence
 from persona.adapter import PersonaAdapter
+from memory.store import pattern_memory
+from memory.signature import pattern_signature
 
 logger = logging.getLogger(__name__)
 
@@ -257,6 +260,27 @@ async def detect_clinical_deterioration_signals(
     result["latest_vitals"] = {k: v for k, v in latest_vitals.items() if k != "consciousness_str"}
     result["evidence_trail"] = evidence.model_dump()
     result["sharp_metadata"] = build_sharp_metadata(sharp)
+
+    # Auto-record pattern to Clinical Pattern Memory (non-blocking, never errors main flow)
+    if os.getenv("PATTERN_MEMORY_ENABLED", "true").lower() == "true":
+        try:
+            conditions = pattern_signature.from_news2_result(
+                score=news2.total_score,
+                triggered_rules=triggered_rules,
+            )
+            if conditions:
+                if news2.total_score >= 7:
+                    outcome = "deterioration_high_risk"
+                elif news2.total_score >= 5:
+                    outcome = "deterioration_medium_risk"
+                else:
+                    outcome = "stable"
+                pattern_memory.record(conditions, outcome)
+                result["pattern_recorded"] = True
+                result["pattern_conditions"] = conditions
+        except Exception:
+            pass  # Pattern recording must never block or crash main flow
+
     if sharp.role:
         result = await persona.adapt(result, sharp.role)
     else:

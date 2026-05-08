@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from typing import Optional
 
 from integrations.fhir_client import FHIRClient, FHIRError
@@ -17,6 +18,8 @@ from sharp import (
 )
 from evidence.trail import build_cross_domain_evidence
 from persona.adapter import PersonaAdapter
+from memory.store import pattern_memory
+from memory.signature import pattern_signature
 
 logger = logging.getLogger(__name__)
 
@@ -256,6 +259,20 @@ async def synthesize_cross_domain_insights(
         med_recency_hours=72.0,
         vital_recency_hours=12.0,
     )
+
+    # Auto-record pattern to Clinical Pattern Memory (non-blocking, never errors main flow)
+    if os.getenv("PATTERN_MEMORY_ENABLED", "true").lower() == "true":
+        try:
+            conditions = pattern_signature.from_synthesis_context(
+                labs=labs_data,
+                meds=meds_data,
+                vitals_summary={"risk_level": det_data.get("risk_level", "")} if det_data else {},
+            )
+            if conditions:
+                outcome = "cross_domain_concern" if confidence_level != "low" else "monitoring"
+                pattern_memory.record(conditions, outcome)
+        except Exception:
+            pass  # Pattern recording must never block or crash main flow
 
     result = {
         "patient_id": effective_id,

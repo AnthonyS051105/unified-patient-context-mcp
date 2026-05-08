@@ -63,3 +63,30 @@ class OrchestratedContext(BaseModel):
     sharp_metadata: dict = Field(default_factory=dict)
     action_required_by: str = "clinician"
     ai_generated: bool = True
+
+
+class PatternRecord(BaseModel):
+    """Internal pattern store entry — not exposed directly to agents."""
+    signature: str
+    conditions: list[str]
+    outcome_counts: dict = Field(default_factory=dict)
+    first_seen: str = ""
+    last_seen: str = ""
+    total_observations: int = 0
+
+
+class PatternInsight(BaseModel):
+    """Response model for get_pattern_insights tool."""
+    pattern_found: bool
+    conditions_checked: list[str] = Field(default_factory=list)
+    signature: Optional[str] = None
+    similar_patterns_seen: int = 0
+    outcome_distribution: dict = Field(default_factory=dict)
+    contextual_insight: str = ""
+    data_scope: str = "current_session_only"
+    session_reset_note: str = "Pattern store resets on server restart. No persistent storage of any kind."
+    confidence: Literal["low", "moderate", "none"] = "none"
+    confidence_note: str = "Session-scoped context only — not a validated statistical claim"
+    action_required_by: str = "clinician"
+    ai_generated: bool = True
+    sharp_metadata: dict = Field(default_factory=dict)

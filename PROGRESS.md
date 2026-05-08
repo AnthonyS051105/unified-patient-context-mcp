@@ -17,10 +17,11 @@
 | Phase 3: Intelligence Layer | ✅ SELESAI (dalam Phase 1) | — |
 | Phase 4: Deploy & Polish | ✅ SELESAI (README, Synthea, end-to-end test) | — |
 | **Phase 5: Advanced Features** | ✅ **SELESAI** | **+56 tests** |
+| **Phase 5.5: Clinical Pattern Memory** | ✅ **SELESAI** | **+23 tests** |
 
-**Total tests saat ini: 125/125 PASS**  
-**9/9 tools registered dan verified**  
-**4/4 Advanced Features implemented: Evidence Trail, Adaptive Persona, Ward Alerts, Meta-Orchestrator**
+**Total tests saat ini: 148/148 PASS**  
+**10/10 tools registered dan verified**  
+**5/5 Advanced Features implemented: Evidence Trail, Adaptive Persona, Ward Alerts, Meta-Orchestrator, Clinical Pattern Memory**
 
 ---
 
@@ -279,6 +280,19 @@ unified-patient-mcp/
 - [x] `.env.example` updated with Phase 5 env vars
 - [x] `PROGRESS.md` updated
 - [x] 125/125 tests pass, zero regressions
+
+### Phase 5.5 — Clinical Pattern Memory ✅ (2026-05-08)
+- [x] `memory/__init__.py`, `memory/store.py`, `memory/signature.py`
+- [x] `ClinicalPatternMemory` — thread-safe singleton in-memory store, SHA-256 hash keys, zero patient data
+- [x] `PatternSignature` — extracts generic conditions from NEWS2 results and synthesis context
+- [x] `PatternRecord` and `PatternInsight` Pydantic models added to `models/advanced.py`
+- [x] `tools/pattern_insights.py` — `get_pattern_insights` tool (Tool 10)
+- [x] Auto-record pattern in Tool 5 (`deterioration.py`) — non-blocking, PATTERN_MEMORY_ENABLED guard
+- [x] Auto-record pattern in Tool 7 (`cross_domain_insights.py`) — non-blocking, PATTERN_MEMORY_ENABLED guard
+- [x] `server.py` updated: 10 tools registered, instructions updated
+- [x] `.env.example` updated with PATTERN_MEMORY_ENABLED, PATTERN_SIMILARITY_THRESHOLD
+- [x] `tests/test_pattern_memory.py` — 23 tests pass
+- [x] **148/148 total tests pass, zero regressions**
 
 ---
 
