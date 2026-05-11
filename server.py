@@ -15,7 +15,7 @@ from tools.pattern_insights import get_pattern_insights
 mcp = FastMCP(
     name="unified-patient-context",
     instructions=(
-        "Nara by NexusHealth — Unified Patient Context MCP Server. "
+        "Nova by NexusHealth — Unified Patient Context MCP Server. "
         "Proactive, Adaptive, Transparent, Pattern-aware, Interoperable healthcare AI layer. "
         "10 clinical tools: patient snapshot, active problems, medication timeline, "
         "abnormal labs, deterioration signals, context delta, cross-domain AI synthesis, "
