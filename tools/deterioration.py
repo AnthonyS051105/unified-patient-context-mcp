@@ -155,6 +155,7 @@ async def detect_clinical_deterioration_signals(
     Args:
         patient_id: FHIR Patient resource ID (overridden by SHARP context if present)
         hours_lookback: Hours of vital sign history to analyze (default 72)
+        role: Clinician role — "physician", "nurse", "pharmacist", or "patient". ALWAYS pass this to adapt output format.
         ctx: MCP context — carries SHARP headers from Prompt Opinion platform
 
     Returns:

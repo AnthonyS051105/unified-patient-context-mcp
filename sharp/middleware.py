@@ -1,12 +1,19 @@
 from typing import Optional
-from sharp.context import SHARPContext
+from sharp.context import SHARPContext, extract_role_from_text, VALID_ROLES
 
 
 def resolve_patient_id(explicit_id: Optional[str], sharp: SHARPContext) -> Optional[str]:
     """
     Prioritize patient_id from SHARP context over explicit parameter.
-    When running on Prompt Opinion, the agent never needs to pass patient_id manually.
+    Also extracts role from patient_id string if sharp.role not yet set
+    (handles cases where agent passes role text inside patient_id field).
     """
+    # If role still not set, try extracting from the explicit_id string as last resort
+    if not sharp.role and explicit_id:
+        role_from_id = extract_role_from_text(explicit_id)
+        if role_from_id:
+            sharp.role = role_from_id
+
     return sharp.patient_id or explicit_id
 
 

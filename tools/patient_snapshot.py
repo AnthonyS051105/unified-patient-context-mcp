@@ -105,12 +105,20 @@ async def get_patient_snapshot(patient_id: str, role: Optional[str] = None, ctx=
     Fetches Patient demographics, active Conditions, MedicationRequests,
     and AllergyIntolerance from FHIR, then generates an AI summary.
 
+    IMPORTANT: Always pass the 'role' parameter to adapt output for the clinician's role.
+    The output format changes fundamentally based on role:
+    - role="physician" → full clinical narrative with medical terminology
+    - role="nurse" → actionable bullet points with monitoring thresholds
+    - role="pharmacist" → medication-focused with drug interaction context
+    - role="patient" → plain language, 6th grade reading level
+
     Args:
         patient_id: FHIR Patient resource ID (overridden by SHARP context if present)
+        role: Clinician role — "physician", "nurse", "pharmacist", or "patient". ALWAYS pass this.
         ctx: MCP context — carries SHARP headers from Prompt Opinion platform
 
     Returns:
-        PatientSnapshot as dict with ai_summary, data_sources, sharp_metadata, and last_updated
+        PatientSnapshot as dict with ai_summary, persona_applied, data_sources, sharp_metadata.
     """
     sharp = extract_sharp_context(ctx, role_hint=role)
     effective_id = resolve_patient_id(patient_id, sharp)

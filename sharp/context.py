@@ -56,8 +56,12 @@ def extract_sharp_context(ctx=None, role_hint: Optional[str] = None) -> SHARPCon
 
         patient_id = meta.get("sharp_patient_id")
         role_from_header = meta.get("sharp_role")
-        # Fallback: use role_hint (from tool parameter) if header not present
-        effective_role = role_from_header or extract_role_from_text(role_hint)
+        # Fallback chain: SHARP header → role_hint param → patient_id text → meta values
+        effective_role = (
+            role_from_header
+            or extract_role_from_text(role_hint)
+            or extract_role_from_text(str(meta))
+        )
         return SHARPContext(
             patient_id=patient_id,
             ehr_token=meta.get("sharp_ehr_token"),

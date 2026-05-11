@@ -167,6 +167,7 @@ async def synthesize_cross_domain_insights(
         patient_id: FHIR Patient resource ID (overridden by SHARP context if present)
         clinical_question: Free-text clinical question (e.g. 'Is this patient safe for discharge?',
                            'What is driving the elevated creatinine?')
+        role: Clinician role — "physician", "nurse", "pharmacist", or "patient". ALWAYS pass this to adapt output format.
         ctx: MCP context — carries SHARP headers from Prompt Opinion platform
 
     Returns:
