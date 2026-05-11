@@ -156,8 +156,6 @@ async def get_medication_timeline(patient_id: str, days: int = 90, role: str = N
     )
     result = timeline.model_dump()
     result["sharp_metadata"] = build_sharp_metadata(sharp)
-    if sharp.role:
-        result = await persona.adapt(result, sharp.role)
-    else:
-        result["persona_applied"] = "physician"
+    effective_role = sharp.role or "physician"
+    result = await persona.adapt(result, effective_role)
     return result

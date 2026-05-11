@@ -134,8 +134,6 @@ async def get_patient_context_delta(patient_id: str, since_hours: int = 48, role
 
     result = delta.model_dump()
     result["sharp_metadata"] = build_sharp_metadata(sharp)
-    if sharp.role:
-        result = await persona.adapt(result, sharp.role)
-    else:
-        result["persona_applied"] = "physician"
+    effective_role = sharp.role or "physician"
+    result = await persona.adapt(result, effective_role)
     return result

@@ -301,11 +301,11 @@ async def scan_ward_alerts(
     )
 
     result = report.model_dump()
-    # Apply persona to summary only (not individual alerts)
-    if sharp.role:
-        summary_wrapper = {"summary_narrative": summary_narrative, "alerts_count": len(alerts)}
-        adapted = await persona.adapt(summary_wrapper, sharp.role)
-        result["summary_narrative"] = adapted.get("content_adapted") or summary_narrative
-        result["persona_applied"] = sharp.role
+    # Apply persona to summary (always — defaults to physician)
+    effective_role = sharp.role or "physician"
+    summary_wrapper = {"summary_narrative": summary_narrative, "alerts_count": len(alerts)}
+    adapted = await persona.adapt(summary_wrapper, effective_role)
+    result["summary_narrative"] = adapted.get("content_adapted") or summary_narrative
+    result["persona_applied"] = effective_role
 
     return result

@@ -283,8 +283,6 @@ async def detect_clinical_deterioration_signals(
         except Exception:
             pass  # Pattern recording must never block or crash main flow
 
-    if sharp.role:
-        result = await persona.adapt(result, sharp.role)
-    else:
-        result["persona_applied"] = "physician"
+    effective_role = sharp.role or "physician"
+    result = await persona.adapt(result, effective_role)
     return result

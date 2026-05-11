@@ -216,8 +216,6 @@ async def get_patient_snapshot(patient_id: str, role: Optional[str] = None, ctx=
     result["sharp_metadata"] = build_sharp_metadata(sharp)
     if errors:
         result["warnings"] = errors
-    if sharp.role:
-        result = await persona.adapt(result, sharp.role)
-    else:
-        result["persona_applied"] = "physician"
+    effective_role = sharp.role or "physician"
+    result = await persona.adapt(result, effective_role)
     return result
