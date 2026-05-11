@@ -54,7 +54,7 @@ def _parse_condition(resource: dict) -> ActiveProblem:
     )
 
 
-async def get_active_problems(patient_id: str, include_resolved: bool = False, ctx=None) -> dict:
+async def get_active_problems(patient_id: str, include_resolved: bool = False, role: str = None, ctx=None) -> dict:
     """
     Get a prioritized list of a patient's clinical problems.
 
@@ -69,7 +69,7 @@ async def get_active_problems(patient_id: str, include_resolved: bool = False, c
     Returns:
         Dict with prioritized 'problems' list and AI urgency scores
     """
-    sharp = extract_sharp_context(ctx)
+    sharp = extract_sharp_context(ctx, role_hint=role)
     effective_id = resolve_patient_id(patient_id, sharp)
 
     if sharp.is_present:

@@ -144,6 +144,7 @@ async def get_recent_abnormal_labs(
     patient_id: str,
     days: int = 30,
     threshold: str = "abnormal",
+    role: str = None,
     ctx=None,
 ) -> dict:
     """
@@ -158,7 +159,7 @@ async def get_recent_abnormal_labs(
     Returns:
         Dict with list of AbnormalLab results, each with clinical_significance
     """
-    sharp = extract_sharp_context(ctx)
+    sharp = extract_sharp_context(ctx, role_hint=role)
     effective_id = resolve_patient_id(patient_id, sharp)
 
     if sharp.is_present:

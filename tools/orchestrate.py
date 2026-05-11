@@ -26,6 +26,7 @@ DISCLAIMER = (
 async def orchestrate_context_from_sources(
     patient_id: str,
     sources: list[str],
+    role: str = None,
     ctx=None,
 ) -> dict:
     """
@@ -44,7 +45,7 @@ async def orchestrate_context_from_sources(
         OrchestratedContext with unified data from all sources, AI synthesis, evidence trail,
         and persona-adapted output.
     """
-    sharp = extract_sharp_context(ctx)
+    sharp = extract_sharp_context(ctx, role_hint=role)
     effective_id = resolve_patient_id(patient_id, sharp)
 
     if sharp.is_present:

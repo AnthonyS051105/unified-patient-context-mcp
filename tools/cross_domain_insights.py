@@ -152,6 +152,7 @@ Respond in this exact JSON format:
 async def synthesize_cross_domain_insights(
     patient_id: str,
     clinical_question: str,
+    role: str = None,
     ctx=None,
 ) -> dict:
     """
@@ -173,7 +174,7 @@ async def synthesize_cross_domain_insights(
         supporting_data counts, action_required_by='clinician', and sharp_metadata.
         Always includes ai_generated=True and disclaimer.
     """
-    sharp = extract_sharp_context(ctx)
+    sharp = extract_sharp_context(ctx, role_hint=role)
     effective_id = resolve_patient_id(patient_id, sharp)
 
     if sharp.is_present:

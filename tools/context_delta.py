@@ -67,7 +67,7 @@ def _summarize_condition(resource: dict) -> dict:
     }
 
 
-async def get_patient_context_delta(patient_id: str, since_hours: int = 48, ctx=None) -> dict:
+async def get_patient_context_delta(patient_id: str, since_hours: int = 48, role: str = None, ctx=None) -> dict:
     """
     Get what has changed in a patient's record over the last N hours.
 
@@ -82,7 +82,7 @@ async def get_patient_context_delta(patient_id: str, since_hours: int = 48, ctx=
     Returns:
         ContextDelta with categorized changes and AI narrative
     """
-    sharp = extract_sharp_context(ctx)
+    sharp = extract_sharp_context(ctx, role_hint=role)
     effective_id = resolve_patient_id(patient_id, sharp)
 
     if sharp.is_present:

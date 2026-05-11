@@ -143,6 +143,7 @@ def _build_triggered_rules(vitals: dict, news2_score: int, mews_score: int) -> l
 async def detect_clinical_deterioration_signals(
     patient_id: str,
     hours_lookback: int = 72,
+    role: str = None,
     ctx=None,
 ) -> dict:
     """
@@ -159,7 +160,7 @@ async def detect_clinical_deterioration_signals(
     Returns:
         DeteriorationReport with NEWS2/MEWS scores, triggered rules, and clinical narrative.
     """
-    sharp = extract_sharp_context(ctx)
+    sharp = extract_sharp_context(ctx, role_hint=role)
     effective_id = resolve_patient_id(patient_id, sharp)
 
     if sharp.is_present:

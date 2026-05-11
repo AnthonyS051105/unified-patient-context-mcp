@@ -107,6 +107,7 @@ async def scan_ward_alerts(
     ward_id: str,
     threshold: str = "high",
     max_patients: int = 20,
+    role: str = None,
     ctx=None,
 ) -> dict:
     """
@@ -125,7 +126,7 @@ async def scan_ward_alerts(
     Returns:
         WardAlertReport with prioritized patient alerts, evidence trails, and persona-adapted summary.
     """
-    sharp = extract_sharp_context(ctx)
+    sharp = extract_sharp_context(ctx, role_hint=role)
     if sharp.is_present:
         log_tool_call("scan_ward_alerts", sharp.session_id, sharp.role)
     else:

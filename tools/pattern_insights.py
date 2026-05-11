@@ -16,6 +16,7 @@ llm = LLMClient()
 async def get_pattern_insights(
     patient_id: str,
     conditions: Optional[list[str]] = None,
+    role: str = None,
     ctx=None,
 ) -> dict:
     """
@@ -31,7 +32,7 @@ async def get_pattern_insights(
                     "creatinine_rising_trend"]). If not provided, derived from patient's latest
                     deterioration report via Tool 5.
     """
-    sharp = extract_sharp_context(ctx)
+    sharp = extract_sharp_context(ctx, role_hint=role)
 
     if os.getenv("PATTERN_MEMORY_ENABLED", "true").lower() != "true":
         return PatternInsight(

@@ -59,7 +59,7 @@ def _parse_medication(resource: dict) -> dict:
     }
 
 
-async def get_medication_timeline(patient_id: str, days: int = 90, ctx=None) -> dict:
+async def get_medication_timeline(patient_id: str, days: int = 90, role: str = None, ctx=None) -> dict:
     """
     Get medication history with drug interaction flags.
 
@@ -75,7 +75,7 @@ async def get_medication_timeline(patient_id: str, days: int = 90, ctx=None) -> 
     Returns:
         MedicationTimeline with interaction_flags and AI explanations
     """
-    sharp = extract_sharp_context(ctx)
+    sharp = extract_sharp_context(ctx, role_hint=role)
     effective_id = resolve_patient_id(patient_id, sharp)
 
     if sharp.is_present:

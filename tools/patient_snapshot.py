@@ -98,7 +98,7 @@ def _parse_allergy(resource: dict) -> Allergy:
     )
 
 
-async def get_patient_snapshot(patient_id: str, ctx=None) -> dict:
+async def get_patient_snapshot(patient_id: str, role: Optional[str] = None, ctx=None) -> dict:
     """
     Retrieve a unified snapshot of a patient's current clinical status.
 
@@ -112,7 +112,7 @@ async def get_patient_snapshot(patient_id: str, ctx=None) -> dict:
     Returns:
         PatientSnapshot as dict with ai_summary, data_sources, sharp_metadata, and last_updated
     """
-    sharp = extract_sharp_context(ctx)
+    sharp = extract_sharp_context(ctx, role_hint=role)
     effective_id = resolve_patient_id(patient_id, sharp)
 
     if sharp.is_present:
