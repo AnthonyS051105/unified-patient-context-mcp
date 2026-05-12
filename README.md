@@ -747,4 +747,69 @@ https://amiable-determination-production.up.railway.app/mcp
 
 ---
 
+## How to Test
+
+Nova is live and ready — no installation or account required to test the server directly.
+
+**All synthetic data. No real PHI.** The demo patient (Eleanor M. Dawson, `synthea-demo-patient`) was generated with [Synthea](https://synthea.mitre.org) and uploaded to the HAPI FHIR public test server.
+
+### Option 1: Prompt Opinion Marketplace (Recommended)
+
+1. Open the [Nova listing on Prompt Opinion Marketplace](https://app.promptopinion.ai/marketplace/mcp/019e01d3-a04c-7c08-aa21-d4a30e98bef0)
+2. Add Nova to your Prompt Opinion workspace
+3. Create an agent and try these example prompts:
+
+| What to test | Example prompt |
+|---|---|
+| Patient snapshot (nurse view) | *"Show me the patient snapshot for synthea-demo-patient as a nurse"* |
+| Deterioration detection | *"Detect clinical deterioration signals for synthea-demo-patient"* |
+| Cross-domain AI synthesis | *"Is the elevated creatinine related to the new medication? patient: synthea-demo-patient"* |
+| Ward alert scan | *"Scan ward ICU-A for patient alerts"* |
+| Clinical Pattern Memory | *"Get pattern insights for synthea-demo-patient with conditions: creatinine_rising, metformin_present"* |
+| Role adaptation (pharmacist) | *"As a pharmacist, show me the medication timeline for synthea-demo-patient"* |
+
+**To test Adaptive Clinical Persona:** ask the same question twice — once with *"as a nurse"* and once with *"as a physician"* — and compare the structure of the output.
+
+### Option 2: MCP Inspector (Direct Tool Invocation)
+
+```bash
+npx @modelcontextprotocol/inspector
+```
+
+Connect to:
+```
+https://amiable-determination-production.up.railway.app/mcp
+```
+
+All 10 tools will appear in the inspector. Invoke any tool directly with:
+- `patient_id`: `synthea-demo-patient`
+- `role`: `physician`, `nurse`, `pharmacist`, or `patient`
+
+**Recommended test sequence to demonstrate Pattern Memory:**
+1. Call `detect_clinical_deterioration_signals` with `patient_id: synthea-demo-patient`
+2. Call it 2 more times with the same patient
+3. Call `get_pattern_insights` with `conditions: ["news2_medium_risk", "tachycardia"]`
+4. You should see `pattern_found: true` and `similar_patterns_seen > 0`
+
+### Option 3: Direct HTTP (curl)
+
+```bash
+# Step 1: Initialize session
+SESSION=$(curl -s -X POST https://amiable-determination-production.up.railway.app/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -D - \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}' \
+  | grep -i "mcp-session-id" | awk '{print $2}' | tr -d '\r')
+
+# Step 2: Call any tool
+curl -s -X POST https://amiable-determination-production.up.railway.app/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "mcp-session-id: $SESSION" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_patient_snapshot","arguments":{"patient_id":"synthea-demo-patient","role":"nurse"}}}'
+```
+
+---
+
 _Nova by NexusHealth — Proactive · Adaptive · Transparent · Pattern-aware · Interoperable._
