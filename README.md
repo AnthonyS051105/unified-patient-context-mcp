@@ -1,13 +1,12 @@
 # Nova by NexusHealth — Unified Patient Context MCP Server
 
-> **"One call. Full picture."**
+> **"Instant context. Better care."**
 
 A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that acts as the **living memory and intelligence layer** of a patient in a multi-agent healthcare AI ecosystem. It aggregates data from FHIR EHR, lab results, medication history, and clinical deterioration signals — and goes beyond aggregation to **think, adapt, alert proactively, and learn from patterns**.
 
-**Hackathon:** Agents Assemble — The Healthcare AI Endgame (Devpost)  
-**Track:** Option 1 — Build a Superpower (MCP Server)  
 **Platform:** [Prompt Opinion](https://promptopinion.ai) with SHARP context propagation  
-**Marketplace:** [Nova on Prompt Opinion Marketplace](https://app.promptopinion.ai/marketplace/mcp/019e01d3-a04c-7c08-aa21-d4a30e98bef0)
+**Marketplace:** [Nova on Prompt Opinion Marketplace](https://app.promptopinion.ai/marketplace/mcp/019e01d3-a04c-7c08-aa21-d4a30e98bef0) \
+**Demonstration Video:** [Watch on YouTube](https://youtu.be/V1qbjtGSS4g)
 
 ---
 
@@ -66,35 +65,41 @@ Nova is the **intelligence layer** between agents and clinical data sources. Age
 ## 5 Advanced Features
 
 ### 1. Adaptive Clinical Persona
+
 Every tool output is **restructured by clinician role** — not just filtered, but fundamentally reshaped. Same data, completely different output:
 
-| Role | Output Format | Focus |
-|---|---|---|
-| `physician` | Narrative + full medical terminology | Differential reasoning, raw values |
-| `nurse` | WATCH / ESCALATE IF / ACTION NOW bullets | Thresholds, escalation triggers |
-| `pharmacist` | Drug-centric structured format | Interactions, renal dosing, contraindications |
-| `patient` | Plain language, 6th grade reading level | What's happening, what's next, questions to ask |
+| Role         | Output Format                            | Focus                                           |
+| ------------ | ---------------------------------------- | ----------------------------------------------- |
+| `physician`  | Narrative + full medical terminology     | Differential reasoning, raw values              |
+| `nurse`      | WATCH / ESCALATE IF / ACTION NOW bullets | Thresholds, escalation triggers                 |
+| `pharmacist` | Drug-centric structured format           | Interactions, renal dosing, contraindications   |
+| `patient`    | Plain language, 6th grade reading level  | What's happening, what's next, questions to ask |
 
 Pass `role` as a parameter to any tool — or it propagates automatically via SHARP context.
 
 ### 2. Proactive Ward Alerts (`scan_ward_alerts`)
+
 Nova doesn't wait to be asked. `scan_ward_alerts` scans an entire ward in parallel, ranks patients by clinical risk, and surfaces who needs attention — before a clinician thinks to ask.
 
 ### 3. Confidence-Weighted Evidence Trail
+
 Every synthesis tool returns a transparent `evidence_trail` with:
+
 - Which data sources were used and their recency
 - Per-source confidence weights (0.0–1.0)
 - What data is missing and why it matters
 - Overall confidence label: `high / moderate / low / insufficient`
 
 ### 4. Clinical Pattern Memory (`get_pattern_insights`)
+
 A session-scoped, **zero-PII pattern accumulation layer**. Nova stores cryptographic hashes of clinical condition combinations — never patient data — and surfaces context when a pattern recurs:
 
-> *"This pattern (creatinine rising + new nephrotoxic agent + declining urine output) has appeared 3 times this session. In 2 of 3 cases, deterioration was subsequently detected within ~31 hours."*
+> _"This pattern (creatinine rising + new nephrotoxic agent + declining urine output) has appeared 3 times this session. In 2 of 3 cases, deterioration was subsequently detected within ~31 hours."_
 
 Pattern store resets on server restart. No persistent storage of any kind.
 
 ### 5. Meta-Orchestrator (`orchestrate_context_from_sources`)
+
 Nova can **call other MCP servers** as part of its context-building, making it a true interoperability hub across the multi-agent ecosystem.
 
 ---
@@ -149,22 +154,22 @@ MOCK_SHARP=true MOCK_PATIENT_ID=synthea-demo-patient MOCK_SHARP_ROLE=nurse pytho
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|---|---|---|
-| `GEMINI_API_KEY` | *(required)* | Google Gemini API key for LLM calls |
-| `GEMINI_MODEL` | `gemini-2.5-flash-lite` | Gemini model to use |
-| `FHIR_BASE_URL` | `https://hapi.fhir.org/baseR4` | FHIR R4 server base URL |
-| `OPENFDA_BASE_URL` | `https://api.fda.gov/drug` | OpenFDA API base URL |
-| `MCP_HOST` | `0.0.0.0` | Server bind host |
-| `MCP_PORT` | `8000` | Server port |
-| `LOG_LEVEL` | `INFO` | Logging level |
-| `MOCK_SHARP` | `false` | Set `true` to simulate SHARP context locally |
-| `MOCK_PATIENT_ID` | `synthea-demo-patient` | Patient ID used when `MOCK_SHARP=true` |
-| `MOCK_SHARP_ROLE` | `physician` | Clinician role when `MOCK_SHARP=true` |
-| `MOCK_EXTERNAL_MCP` | `true` | Use mock radiology/pharmacy MCP data for demo |
-| `WARD_SCAN_MAX_PATIENTS` | `20` | Max patients scanned per ward call |
-| `PATTERN_MEMORY_ENABLED` | `true` | Enable Clinical Pattern Memory |
-| `PATTERN_SIMILARITY_THRESHOLD` | `0.8` | Minimum similarity for pattern match |
+| Variable                       | Default                        | Description                                   |
+| ------------------------------ | ------------------------------ | --------------------------------------------- |
+| `GEMINI_API_KEY`               | _(required)_                   | Google Gemini API key for LLM calls           |
+| `GEMINI_MODEL`                 | `gemini-2.0-flash`             | Gemini model to use                           |
+| `FHIR_BASE_URL`                | `https://hapi.fhir.org/baseR4` | FHIR R4 server base URL                       |
+| `OPENFDA_BASE_URL`             | `https://api.fda.gov/drug`     | OpenFDA API base URL                          |
+| `MCP_HOST`                     | `0.0.0.0`                      | Server bind host                              |
+| `MCP_PORT`                     | `8000`                         | Server port                                   |
+| `LOG_LEVEL`                    | `INFO`                         | Logging level                                 |
+| `MOCK_SHARP`                   | `false`                        | Set `true` to simulate SHARP context locally  |
+| `MOCK_PATIENT_ID`              | `synthea-demo-patient`         | Patient ID used when `MOCK_SHARP=true`        |
+| `MOCK_SHARP_ROLE`              | `physician`                    | Clinician role when `MOCK_SHARP=true`         |
+| `MOCK_EXTERNAL_MCP`            | `true`                         | Use mock radiology/pharmacy MCP data for demo |
+| `WARD_SCAN_MAX_PATIENTS`       | `20`                           | Max patients scanned per ward call            |
+| `PATTERN_MEMORY_ENABLED`       | `true`                         | Enable Clinical Pattern Memory                |
+| `PATTERN_SIMILARITY_THRESHOLD` | `0.8`                          | Minimum similarity for pattern match          |
 
 ---
 
@@ -181,6 +186,7 @@ Unified snapshot of a patient's current clinical status: demographics, active co
 | `role` | string | `physician` / `nurse` / `pharmacist` / `patient` |
 
 **Example output (role="nurse"):**
+
 ```json
 {
   "patient_id": "synthea-demo-patient",
@@ -189,7 +195,10 @@ Unified snapshot of a patient's current clinical status: demographics, active co
   "gender": "female",
   "active_conditions": [
     { "display": "Type 2 Diabetes Mellitus", "clinical_status": "active" },
-    { "display": "Chronic Kidney Disease, Stage 3", "clinical_status": "active" }
+    {
+      "display": "Chronic Kidney Disease, Stage 3",
+      "clinical_status": "active"
+    }
   ],
   "active_medications_count": 4,
   "allergies": [{ "substance": "Penicillin", "severity": "severe" }],
@@ -214,6 +223,7 @@ Active clinical problems prioritized by AI-assessed clinical urgency. Role-aware
 | `role` | string | Clinician role for output adaptation |
 
 **Example output:**
+
 ```json
 {
   "problems": [
@@ -247,6 +257,7 @@ Medication history with OpenFDA drug interaction flags. Automatically deduplicat
 | `role` | string | Clinician role — pharmacist gets detailed interaction explanations |
 
 **Example output:**
+
 ```json
 {
   "medications": [
@@ -286,6 +297,7 @@ Abnormal lab results with trend analysis and AI-generated clinical significance 
 | `role` | string | Clinician role |
 
 **Example output:**
+
 ```json
 {
   "abnormal_labs": [
@@ -302,7 +314,10 @@ Abnormal lab results with trend analysis and AI-generated clinical significance 
         "change_percent": 40.0
       },
       "ai_explanation": "Creatinine at 2.1 mg/dL represents a 40% rise over 48 hours — warrants urgent evaluation.",
-      "evidence_trail": { "overall_confidence": 0.82, "confidence_label": "high" }
+      "evidence_trail": {
+        "overall_confidence": 0.82,
+        "confidence_label": "high"
+      }
     }
   ],
   "total_abnormal": 1
@@ -323,6 +338,7 @@ Detect clinical deterioration using **NEWS2** (National Early Warning Score 2) a
 | `role` | string | Clinician role |
 
 **Example output:**
+
 ```json
 {
   "news2": { "total_score": 7, "risk_level": "high" },
@@ -337,7 +353,10 @@ Detect clinical deterioration using **NEWS2** (National Early Warning Score 2) a
   "clinical_narrative": "The combination of elevated respiratory rate, reduced oxygen saturation, and tachycardia produces a NEWS2 score of 7 — HIGH risk category requiring immediate escalation.",
   "confidence": "rule-based",
   "action_required_by": "clinician",
-  "evidence_trail": { "overall_confidence": 0.79, "confidence_label": "moderate" },
+  "evidence_trail": {
+    "overall_confidence": 0.79,
+    "confidence_label": "moderate"
+  },
   "pattern_recorded": true,
   "persona_applied": "nurse"
 }
@@ -365,6 +384,7 @@ What has changed for a patient in the last N hours across labs, medications, vit
 | `role` | string | Clinician role |
 
 **Example output:**
+
 ```json
 {
   "since_hours": 48,
@@ -383,7 +403,7 @@ What has changed for a patient in the last N hours across labs, medications, vit
 
 **The AI Factor tool.** Answers a clinical question by simultaneously synthesizing lab trends, medication history, and vital sign patterns — something no SQL query or rule engine can do.
 
-Rule engines can flag "creatinine high" and "metformin prescribed" separately. Only AI can connect: *"Creatinine rose 40% in 48h, coinciding with metformin initiation 3 days ago, alongside declining urine output — this pattern warrants evaluation for AKI."*
+Rule engines can flag "creatinine high" and "metformin prescribed" separately. Only AI can connect: _"Creatinine rose 40% in 48h, coinciding with metformin initiation 3 days ago, alongside declining urine output — this pattern warrants evaluation for AKI."_
 
 Calls Tools 4, 3, and 5 in parallel, then synthesizes across all three domains. Auto-records pattern to Clinical Pattern Memory.
 
@@ -395,13 +415,17 @@ Calls Tools 4, 3, and 5 in parallel, then synthesizes across all three domains. 
 | `role` | string | Clinician role — shapes synthesis framing |
 
 **Example output:**
+
 ```json
 {
   "clinical_question": "Is the elevated creatinine related to the new medication?",
   "synthesis_narrative": "The 40% rise in creatinine over 48 hours temporally correlates with metformin initiation 3 days ago. Combined with elevated respiratory rate and reduced SpO2, this pattern is consistent with declining renal clearance and warrants evaluation for medication-related nephrotoxicity. Action required by: clinician.",
   "confidence_level": "moderate",
   "confidence_reasoning": "Temporal correlation is strong but causation requires clinical judgment; baseline creatinine is unavailable.",
-  "data_gaps": ["No baseline creatinine before metformin initiation", "eGFR not available"],
+  "data_gaps": [
+    "No baseline creatinine before metformin initiation",
+    "eGFR not available"
+  ],
   "cross_domain_patterns": [
     "Creatinine rising trend (labs) coincides with metformin start (medications)",
     "Elevated RR + reduced SpO2 (vitals) may reflect metabolic acidosis compensation"
@@ -411,7 +435,11 @@ Calls Tools 4, 3, and 5 in parallel, then synthesizes across all three domains. 
     "confidence_label": "moderate",
     "evidence_items": [
       { "source": "Lab/Creatinine", "weight": 0.85, "quality": "complete" },
-      { "source": "Medication/Metformin", "weight": 0.72, "quality": "complete" },
+      {
+        "source": "Medication/Metformin",
+        "weight": 0.72,
+        "quality": "complete"
+      },
       { "source": "Vitals/SpO2", "weight": 0.61, "quality": "partial" }
     ],
     "missing_data": ["Baseline creatinine", "eGFR calculation"]
@@ -437,6 +465,7 @@ Calls Tools 4, 3, and 5 in parallel, then synthesizes across all three domains. 
 | `role` | string | Clinician role — nurse gets actionable bullets, physician gets clinical detail |
 
 **Example output:**
+
 ```json
 {
   "ward_id": "ICU-A",
@@ -450,7 +479,10 @@ Calls Tools 4, 3, and 5 in parallel, then synthesizes across all three domains. 
       "alert_level": "high",
       "news2_score": 7,
       "primary_signal": "NEWS2=7 — emergency response indicated",
-      "secondary_signals": ["Creatinine rising 40%", "Metformin interaction flag"],
+      "secondary_signals": [
+        "Creatinine rising 40%",
+        "Metformin interaction flag"
+      ],
       "recommended_action": "Immediate clinical review",
       "evidence_trail": { "overall_confidence": 0.79 }
     }
@@ -474,6 +506,7 @@ Calls Tools 4, 3, and 5 in parallel, then synthesizes across all three domains. 
 | `role` | string | Clinician role |
 
 **Example output:**
+
 ```json
 {
   "sources_queried": ["nara_core", "radiology_mcp", "pharmacy_mcp"],
@@ -497,9 +530,10 @@ Calls Tools 4, 3, and 5 in parallel, then synthesizes across all three domains. 
 
 Every call to Tools 5 and 7 automatically records a cryptographic hash of the clinical pattern encountered. `get_pattern_insights` queries this accumulation to surface context like:
 
-> *"This pattern has appeared 3 times this session. In 2 of 3 cases, deterioration was detected within ~31 hours. Treat as a weak signal requiring clinical judgment."*
+> _"This pattern has appeared 3 times this session. In 2 of 3 cases, deterioration was detected within ~31 hours. Treat as a weak signal requiring clinical judgment."_
 
 **Privacy architecture:**
+
 - What is **NOT stored**: `"Patient Eleanor has creatinine 1.8"` ← PII
 - What **IS stored**: `sha256("creatinine_rise_80pct|new_metformin|urine_decrease")` → outcome seen
 - No way to reverse-engineer patient identity from hashes
@@ -513,10 +547,15 @@ Every call to Tools 5 and 7 automatically records a cryptographic hash of the cl
 | `role` | string | Clinician role |
 
 **Example output:**
+
 ```json
 {
   "pattern_found": true,
-  "conditions_checked": ["creatinine_rising_trend", "metformin_present", "urine_decreasing"],
+  "conditions_checked": [
+    "creatinine_rising_trend",
+    "metformin_present",
+    "urine_decreasing"
+  ],
   "session_context": {
     "similar_patterns_seen": 3,
     "outcome_distribution": {
@@ -542,13 +581,13 @@ SHARP (Structured Healthcare Agent Request Protocol) is the extension spec from 
 
 When running on the Prompt Opinion platform, every tool call automatically receives:
 
-| Header | Description |
-|---|---|
-| `sharp_patient_id` | Active patient in the current clinician session |
-| `sharp_ehr_token` | EHR authentication token propagated from the session |
-| `sharp_session_id` | Session ID for zero-PII audit trail |
-| `sharp_org_id` | Healthcare organization ID |
-| `sharp_role` | Clinician role: `physician`, `nurse`, `pharmacist`, `patient` |
+| Header             | Description                                                   |
+| ------------------ | ------------------------------------------------------------- |
+| `sharp_patient_id` | Active patient in the current clinician session               |
+| `sharp_ehr_token`  | EHR authentication token propagated from the session          |
+| `sharp_session_id` | Session ID for zero-PII audit trail                           |
+| `sharp_org_id`     | Healthcare organization ID                                    |
+| `sharp_role`       | Clinician role: `physician`, `nurse`, `pharmacist`, `patient` |
 
 When SHARP headers are present, `patient_id` and `role` are resolved automatically — the agent doesn't need to specify them. If SHARP is absent, both can be passed as explicit tool parameters.
 
@@ -563,30 +602,30 @@ MOCK_SHARP=true MOCK_PATIENT_ID=synthea-demo-patient MOCK_SHARP_ROLE=nurse pytho
 
 ## AI Factor — 6 Genuinely Irreplaceable Capabilities
 
-| Capability | Why Rule-Based Systems Cannot Do This |
-|---|---|
-| **Semantic Entity Resolution** | Detects "Metformin HCl 500mg" = "Glucophage" without a hardcoded lookup table |
-| **Cross-Domain Clinical Synthesis** | Connects lab trends + medication timing + vital signs *simultaneously* to answer a clinical question |
-| **Adaptive Clinical Persona** | Reshapes output depth, format, and terminology based on who is reading — not just filters fields |
-| **Proactive Pattern Detection** | Scans an entire ward and surfaces risk without being asked |
-| **Evidence-Weighted Reasoning** | Calculates and displays confidence per data source with transparency notes |
-| **Clinical Pattern Memory** | Recognizes anonymous patterns across patients in a session and surfaces context that only emerges from accumulation |
+| Capability                          | Why Rule-Based Systems Cannot Do This                                                                               |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| **Semantic Entity Resolution**      | Detects "Metformin HCl 500mg" = "Glucophage" without a hardcoded lookup table                                       |
+| **Cross-Domain Clinical Synthesis** | Connects lab trends + medication timing + vital signs _simultaneously_ to answer a clinical question                |
+| **Adaptive Clinical Persona**       | Reshapes output depth, format, and terminology based on who is reading — not just filters fields                    |
+| **Proactive Pattern Detection**     | Scans an entire ward and surfaces risk without being asked                                                          |
+| **Evidence-Weighted Reasoning**     | Calculates and displays confidence per data source with transparency notes                                          |
+| **Clinical Pattern Memory**         | Recognizes anonymous patterns across patients in a session and surfaces context that only emerges from accumulation |
 
 ---
 
 ## Design Principles
 
-| Principle | Implementation |
-|---|---|
-| **Stateless** | Zero persistent patient data. Every tool call is a fresh FHIR fetch. |
-| **AI as explainer, not decider** | Rule engines (NEWS2/MEWS) make clinical decisions. LLM generates language only. |
-| **Graceful degradation** | FHIR timeout → informative error with `retry_suggested`. LLM failure → structured data without narrative. |
-| **Zero PII in logs** | Patient IDs and session IDs are always `[REDACTED]` in application logs. |
-| **Pattern privacy** | Pattern Memory stores only SHA-256 hashes of condition combinations — never patient IDs or raw clinical values. |
-| **FHIR R4 only** | All resources use FHIR R4 format via HAPI public server. |
-| **Async throughout** | All network calls use `httpx.AsyncClient`. No blocking I/O. |
-| **Persona transparency** | Every response includes `persona_applied` field. |
-| **Evidence transparency** | All synthesis tools include `evidence_trail` with confidence weights and data gaps. |
+| Principle                        | Implementation                                                                                                  |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Stateless**                    | Zero persistent patient data. Every tool call is a fresh FHIR fetch.                                            |
+| **AI as explainer, not decider** | Rule engines (NEWS2/MEWS) make clinical decisions. LLM generates language only.                                 |
+| **Graceful degradation**         | FHIR timeout → informative error with `retry_suggested`. LLM failure → structured data without narrative.       |
+| **Zero PII in logs**             | Patient IDs and session IDs are always `[REDACTED]` in application logs.                                        |
+| **Pattern privacy**              | Pattern Memory stores only SHA-256 hashes of condition combinations — never patient IDs or raw clinical values. |
+| **FHIR R4 only**                 | All resources use FHIR R4 format via HAPI public server.                                                        |
+| **Async throughout**             | All network calls use `httpx.AsyncClient`. No blocking I/O.                                                     |
+| **Persona transparency**         | Every response includes `persona_applied` field.                                                                |
+| **Evidence transparency**        | All synthesis tools include `evidence_trail` with confidence weights and data gaps.                             |
 
 ---
 
@@ -680,7 +719,7 @@ unified-patient-mcp/
 - **Pydantic v2** — data validation and serialization
 - **HAPI FHIR** public test server (R4) — `hapi.fhir.org/baseR4`
 - **OpenFDA API** — drug interaction data
-- **Google Gemini 2.5 Flash Lite** — clinical explanation, synthesis, and persona adaptation
+- **Google Gemini 2.0 Flash** — clinical explanation, synthesis, and persona adaptation
 - **Railway.app** — deployment
 - **pytest + pytest-asyncio** — 148 automated tests
 
@@ -701,10 +740,11 @@ railway up
 **Live server:** `https://amiable-determination-production.up.railway.app`
 
 **MCP endpoint** (register this in Prompt Opinion):
+
 ```
 https://amiable-determination-production.up.railway.app/mcp
 ```
 
 ---
 
-*Built for the Agents Assemble hackathon. Nova by NexusHealth — Proactive · Adaptive · Transparent · Pattern-aware · Interoperable.*
+_Nova by NexusHealth — Proactive · Adaptive · Transparent · Pattern-aware · Interoperable._
